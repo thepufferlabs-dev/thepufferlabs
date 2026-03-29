@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-navy: #0F172A;
+  --color-navy-light: #1E293B;
+  --color-navy-lighter: #334155;
+  --color-teal: #2DD4BF;
+  --color-teal-dark: #14B8A6;
+  --color-lime: #A3E635;
+  --color-lime-dark: #84CC16;
+  --color-text-primary: #E2E8F0;
+  --color-text-muted: #94A3B8;
+  --color-text-dim: #64748B;
+  --color-glass: rgba(15, 23, 42, 0.6);
+  --color-glass-border: rgba(45, 212, 191, 0.1);
+  --color-glow-teal: rgba(45, 212, 191, 0.15);
+  --color-glow-lime: rgba(163, 230, 53, 0.1);
+  --font-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #0F172A;
+  color: #E2E8F0;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(45, 212, 191, 0.3);
+  color: #E2E8F0;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Prose styles for markdown content */
+.prose-puffer {
+  color: #CBD5E1;
+  line-height: 1.8;
+  font-size: 0.9375rem;
+}
+
+.prose-puffer h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #E2E8F0;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.prose-puffer h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #E2E8F0;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  line-height: 1.3;
+}
+
+.prose-puffer h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #E2E8F0;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.prose-puffer h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #CBD5E1;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-puffer p {
+  margin-bottom: 1rem;
+}
+
+.prose-puffer ul,
+.prose-puffer ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.prose-puffer ul {
+  list-style-type: disc;
+}
+
+.prose-puffer ol {
+  list-style-type: decimal;
+}
+
+.prose-puffer li {
+  margin-bottom: 0.25rem;
+}
+
+.prose-puffer li > ul,
+.prose-puffer li > ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.prose-puffer strong {
+  font-weight: 600;
+  color: #E2E8F0;
+}
+
+.prose-puffer em {
+  font-style: italic;
+  color: #94A3B8;
+}
+
+.prose-puffer > :first-child {
+  margin-top: 0;
+}
+
+/* -------------------------------------------------------
+   Mermaid diagram theme overrides
+   Colors are replaced in the SVG string by recolorSvg().
+   These CSS rules are safety nets for edge cases.
+   ------------------------------------------------------- */
+
+.mermaid-themed svg {
+  background: transparent !important;
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace !important;
+}
+
+/* Ensure all text is visible */
+.mermaid-themed text,
+.mermaid-themed tspan {
+  fill: #E2E8F0 !important;
+}
+
+/* foreignObject HTML labels */
+.mermaid-themed foreignObject div,
+.mermaid-themed foreignObject span,
+.mermaid-themed foreignObject p {
+  color: #E2E8F0 !important;
+}
+
+/* Edge label text slightly muted */
+.mermaid-themed .edgeLabel span {
+  color: #94A3B8 !important;
+  background: #0F172A !important;
+}
+
+.mermaid-themed .edgeLabel rect {
+  fill: #0F172A !important;
+}
