@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/ui/Toast";
 
 type AuthContextType = {
   user: User | null;
@@ -80,6 +81,20 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Handle auth errors in URL hash (e.g. expired email confirmation links)
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash;
+      if (hash.includes("error=")) {
+        const params = new URLSearchParams(hash.substring(1));
+        const errorDesc = params.get("error_description");
+        if (errorDesc) {
+          showToast(errorDesc.replace(/\+/g, " "), "error");
+        }
+        // Clean up the URL
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -96,6 +111,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       // Sync profile demographics on sign-in / token refresh
       if (session?.user && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
         syncProfile(session.user);
+
+        // Clean up auth hash from URL after successful sign-in
+        if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+          window.history.replaceState(null, "", window.location.pathname);
+          showToast("Email verified! Welcome to The Puffer Labs.", "success");
+        }
       }
     });
 

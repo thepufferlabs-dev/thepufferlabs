@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Provider } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { supabase, getAuthCallbackUrl } from "@/lib/supabase";
 import AvatarCropper from "@/components/ui/AvatarCropper";
 import { showToast } from "@/components/ui/Toast";
 
@@ -91,7 +91,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/premium/`,
+        redirectTo: getAuthCallbackUrl("/"),
       },
     });
     if (error) showToast(error.message, "error");
