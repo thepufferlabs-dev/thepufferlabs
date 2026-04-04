@@ -44,12 +44,23 @@ jobs:
 
           -- Delete all auth users (triggers will not fire since profiles are already truncated)
           DELETE FROM auth.users;
-
-          -- Clear avatar storage
-          DELETE FROM storage.objects WHERE bucket_id = 'avatars';
           SQL
 
-          echo "All data cleaned successfully."
+          echo "DB data cleaned successfully."
+
+      - name: Empty avatars storage bucket
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            "https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/storage/v1/bucket/avatars/empty" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json")
+
+          if [ "$response" = "200" ] || [ "$response" = "404" ]; then
+            echo "Avatars bucket emptied successfully."
+          else
+            echo "Warning: Could not empty avatars bucket (HTTP $response). Bucket may not exist yet."
+          fi
 
   rejected:
     name: Confirmation Failed
