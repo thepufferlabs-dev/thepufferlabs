@@ -7,12 +7,18 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO NOTHING;
 
--- 2. Storage RLS — anyone can view avatars (public bucket)
+-- 2. Storage RLS — drop existing policies first to make migration idempotent
+DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update own avatar" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete own avatar" ON storage.objects;
+
+-- 3. Anyone can view avatars (public bucket)
 CREATE POLICY "Anyone can view avatars"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'avatars');
 
--- 3. Authenticated users can upload their own avatar (path must start with their user id)
+-- 4. Authenticated users can upload their own avatar (path must start with their user id)
 CREATE POLICY "Users can upload own avatar"
   ON storage.objects FOR INSERT
   WITH CHECK (
@@ -21,7 +27,7 @@ CREATE POLICY "Users can upload own avatar"
     AND (storage.foldername(name))[1] = auth.uid()::TEXT
   );
 
--- 4. Users can update/overwrite their own avatar
+-- 5. Users can update/overwrite their own avatar
 CREATE POLICY "Users can update own avatar"
   ON storage.objects FOR UPDATE
   USING (
@@ -35,7 +41,7 @@ CREATE POLICY "Users can update own avatar"
     AND (storage.foldername(name))[1] = auth.uid()::TEXT
   );
 
--- 5. Users can delete their own avatar
+-- 6. Users can delete their own avatar
 CREATE POLICY "Users can delete own avatar"
   ON storage.objects FOR DELETE
   USING (
