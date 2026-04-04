@@ -124,7 +124,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "global" });
     setUser(null);
     setSession(null);
   }
