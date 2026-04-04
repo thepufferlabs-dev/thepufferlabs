@@ -22,6 +22,22 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+/** Sync OAuth demographics into the profiles table on each sign-in */
+async function syncProfile(user: User) {
+  const meta = user.user_metadata ?? {};
+  const avatar = meta.avatar_url || meta.picture || null;
+  const name = meta.full_name || meta.name || meta.user_name || null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from("profiles") as any)
+    .update({
+      full_name: name,
+      display_name: name,
+      avatar_url: avatar,
+    })
+    .eq("id", user.id);
+}
+
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -36,10 +52,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Sync profile demographics on sign-in / token refresh
+      if (session?.user && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        syncProfile(session.user);
+      }
     });
 
     return () => subscription.unsubscribe();

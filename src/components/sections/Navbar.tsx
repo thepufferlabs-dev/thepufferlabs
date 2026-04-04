@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import PufferLogo from "@/components/ui/PufferLogo";
@@ -10,12 +10,47 @@ import AuthModal from "@/components/ui/AuthModal";
 import { useAuth } from "@/components/AuthProvider";
 import { SITE, NAV_LINKS } from "@/lib/constants";
 
+function UserAvatar({ user, size = 32 }: { user: { email?: string; user_metadata?: { avatar_url?: string; picture?: string; full_name?: string; name?: string } }; size?: number }) {
+  const meta = user.user_metadata ?? {};
+  const avatarUrl = meta.avatar_url || meta.picture;
+  const name = meta.full_name || meta.name || user.email || "";
+  const initials = name
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt={name} width={size} height={size} className="rounded-full object-cover" referrerPolicy="no-referrer" />;
+  }
+
+  return (
+    <div className="flex items-center justify-center rounded-full bg-teal/20 text-teal font-semibold text-xs" style={{ width: size, height: size }}>
+      {initials || "U"}
+    </div>
+  );
+}
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   const { user, loading, signOut } = useAuth();
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+    if (profileOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileOpen]);
 
   function resolveHref(href: string) {
     return href.startsWith("#") ? href : `${basePath}${href}`;
@@ -32,13 +67,9 @@ export default function Navbar() {
     return pathname === resolved || pathname.startsWith(`${resolved}/`);
   }
 
-  function handlePremiumClick() {
-    if (user) {
-      window.location.href = `${basePath}/premium/`;
-    } else {
-      setAuthOpen(true);
-    }
-  }
+  const userMeta = user?.user_metadata ?? {};
+  const displayName = userMeta.full_name || userMeta.name || user?.email || "";
+  const provider = user?.app_metadata?.provider ?? "email";
 
   return (
     <>
@@ -73,28 +104,74 @@ export default function Navbar() {
             })}
             <ThemeToggle className="ml-2" />
 
-            {/* Premium Content button */}
-            <div className="ml-2">
-              <button
-                onClick={handlePremiumClick}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.4)] transition-all duration-200 active:scale-[0.98] cursor-pointer"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                </svg>
-                Premium
-              </button>
-            </div>
-
-            {/* User menu / Sign in */}
+            {/* User avatar / Sign in */}
             {!loading && (
               <div className="ml-2">
                 {user ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-text-muted truncate max-w-[120px]">{user.email}</span>
-                    <button onClick={signOut} className="px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-[var(--theme-white-alpha-5)] rounded-lg transition-colors cursor-pointer">
-                      Sign Out
+                  <div className="relative" ref={profileRef}>
+                    <button
+                      onClick={() => setProfileOpen(!profileOpen)}
+                      className="flex items-center rounded-full transition-all hover:ring-2 hover:ring-teal/30 cursor-pointer"
+                      aria-label="Account menu"
+                      aria-expanded={profileOpen}
+                    >
+                      <UserAvatar user={user} size={34} />
                     </button>
+
+                    {/* Dropdown */}
+                    {profileOpen && (
+                      <div
+                        className="absolute right-0 top-full mt-2 w-72 rounded-xl border p-1 shadow-xl"
+                        style={{
+                          background: "var(--color-navy)",
+                          borderColor: "var(--theme-border)",
+                          boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
+                        }}
+                      >
+                        {/* Account info */}
+                        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--theme-border)" }}>
+                          <div className="flex items-center gap-3">
+                            <UserAvatar user={user} size={40} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-text-primary truncate">{displayName}</p>
+                              <p className="text-xs text-text-muted truncate">{user.email}</p>
+                              <span className="inline-block mt-1 text-[10px] font-medium uppercase tracking-wider text-text-dim bg-[var(--theme-white-alpha-5)] rounded px-1.5 py-0.5">{provider}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="py-1">
+                          <button
+                            onClick={() => {
+                              setProfileOpen(false);
+                              window.location.href = `${basePath}/premium/`;
+                            }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-text-muted hover:text-text-primary hover:bg-[var(--theme-white-alpha-5)] rounded-lg transition-colors cursor-pointer"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                              <circle cx="12" cy="7" r="4" />
+                            </svg>
+                            Account Info
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProfileOpen(false);
+                              signOut();
+                            }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                              <polyline points="16 17 21 12 16 7" />
+                              <line x1="21" y1="12" x2="9" y2="12" />
+                            </svg>
+                            Log Out
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <Button variant="ghost" size="sm" onClick={() => setAuthOpen(true)}>
@@ -145,28 +222,44 @@ export default function Navbar() {
               })}
               <ThemeToggle showLabel />
 
-              {/* Mobile Premium button */}
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  handlePremiumClick();
-                }}
-                className="mt-2 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-all cursor-pointer w-full"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                </svg>
-                Premium Content
-              </button>
-
               {/* Mobile auth */}
               {!loading && (
                 <div className="mt-2">
                   {user ? (
-                    <div className="flex items-center justify-between px-4 py-3">
-                      <span className="text-xs text-text-muted truncate">{user.email}</span>
-                      <button onClick={signOut} className="text-xs text-text-muted hover:text-text-primary cursor-pointer">
-                        Sign Out
+                    <div className="flex flex-col gap-1 border-t pt-3" style={{ borderColor: "var(--theme-border)" }}>
+                      <div className="flex items-center gap-3 px-4 py-2">
+                        <UserAvatar user={user} size={36} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-text-primary truncate">{displayName}</p>
+                          <p className="text-xs text-text-muted truncate">{user.email}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setOpen(false);
+                          window.location.href = `${basePath}/premium/`;
+                        }}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-text-muted hover:text-text-primary hover:bg-[var(--theme-white-alpha-5)] rounded-lg transition-colors cursor-pointer"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Account Info
+                      </button>
+                      <button
+                        onClick={() => {
+                          setOpen(false);
+                          signOut();
+                        }}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        Log Out
                       </button>
                     </div>
                   ) : (
