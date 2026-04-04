@@ -11,7 +11,7 @@ type AuthModalProps = {
   onClose: () => void;
 };
 
-type Mode = "login" | "register" | "forgot";
+type Mode = "login" | "register" | "forgot" | "verify_otp";
 
 const OAUTH_PROVIDERS: { id: Provider; label: string; icon: React.ReactNode }[] = [
   {
@@ -47,6 +47,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
 
   function reset() {
     setEmail("");
@@ -56,6 +57,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
     setAvatarPreview(null);
     setRawImageSrc(null);
     setShowCropper(false);
+    setOtpCode("");
   }
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -145,9 +147,40 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
     }
 
     setLoading(false);
-    reset();
-    onClose();
-    showToast("Account created! Check your email for the confirmation link.", "success");
+    setMode("verify_otp");
+    showToast("Check your email for the 6-digit verification code.", "success");
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpCode,
+      type: "signup",
+    });
+    setLoading(false);
+    if (error) {
+      showToast(error.message, "error");
+    } else {
+      reset();
+      onClose();
+      showToast("Email verified! Welcome to The Puffer Labs.", "success");
+    }
+  }
+
+  async function handleResendOtp() {
+    setLoading(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+    });
+    setLoading(false);
+    if (error) {
+      showToast(error.message, "error");
+    } else {
+      showToast("Verification code resent! Check your email.", "success");
+    }
   }
 
   async function handleForgotPassword(e: React.FormEvent) {
@@ -199,11 +232,13 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
             {mode === "login" && "Welcome Back"}
             {mode === "register" && "Create Account"}
             {mode === "forgot" && "Reset Password"}
+            {mode === "verify_otp" && "Verify Email"}
           </h2>
           <p className="mt-1 text-sm text-text-muted">
             {mode === "login" && "Sign in to access premium content"}
             {mode === "register" && "Join to unlock premium content"}
             {mode === "forgot" && "Enter your email to reset password"}
+            {mode === "verify_otp" && `Enter the 6-digit code sent to ${email}`}
           </p>
         </div>
 
@@ -336,6 +371,40 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
             <button type="button" onClick={() => switchMode("login")} className="text-sm text-text-muted hover:text-text-primary cursor-pointer">
               Back to sign in
             </button>
+          </form>
+        )}
+
+        {/* OTP Verification Form */}
+        {mode === "verify_otp" && (
+          <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="6-digit code"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+              required
+              autoFocus
+              className={`${inputClass} text-center text-2xl tracking-[0.5em]`}
+              style={{ borderColor: "var(--theme-border)" }}
+            />
+            <button
+              type="submit"
+              disabled={loading || otpCode.length !== 6}
+              className="rounded-lg bg-teal px-4 py-3 text-sm font-semibold text-btn-text transition-all hover:bg-teal-dark disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? "Verifying..." : "Verify Email"}
+            </button>
+            <div className="flex items-center justify-between text-sm">
+              <button type="button" onClick={handleResendOtp} disabled={loading} className="text-teal hover:underline cursor-pointer disabled:opacity-50">
+                Resend code
+              </button>
+              <button type="button" onClick={() => switchMode("register")} className="text-text-muted hover:text-text-primary cursor-pointer">
+                Back
+              </button>
+            </div>
           </form>
         )}
       </div>
