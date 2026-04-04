@@ -41,6 +41,8 @@ jobs:
           NEXT_PUBLIC_OWNER_PHONE: ${{ secrets.OWNER_PHONE }}
           NEXT_PUBLIC_OWNER_LINKEDIN: ${{ secrets.OWNER_LINKEDIN }}
           GITHUB_PAT: ${{ secrets.PUFFERLABS_PAT }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
