@@ -145,7 +145,7 @@ export default function Navbar() {
                           <button
                             onClick={() => {
                               setProfileOpen(false);
-                              window.location.href = `${basePath}/premium/`;
+                              window.location.href = `${basePath}/account/`;
                             }}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-text-muted hover:text-text-primary hover:bg-[var(--theme-white-alpha-5)] rounded-lg transition-colors cursor-pointer"
                           >
@@ -237,7 +237,7 @@ export default function Navbar() {
                       <button
                         onClick={() => {
                           setOpen(false);
-                          window.location.href = `${basePath}/premium/`;
+                          window.location.href = `${basePath}/account/`;
                         }}
                         className="flex items-center gap-3 px-4 py-2.5 text-sm text-text-muted hover:text-text-primary hover:bg-[var(--theme-white-alpha-5)] rounded-lg transition-colors cursor-pointer"
                       >

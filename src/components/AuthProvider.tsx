@@ -95,9 +95,23 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session: localSession } }) => {
+      if (localSession) {
+        // Validate the session against the server to catch revoked tokens
+        const {
+          data: { user: validatedUser },
+          error,
+        } = await supabase.auth.getUser();
+        if (error || !validatedUser) {
+          // Token is invalid/revoked — clear it
+          await supabase.auth.signOut({ scope: "local" });
+          setSession(null);
+          setUser(null);
+        } else {
+          setSession(localSession);
+          setUser(validatedUser);
+        }
+      }
       setLoading(false);
     });
 
@@ -124,7 +138,13 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signOut() {
-    await supabase.auth.signOut({ scope: "global" });
+    // Revoke session on server, then clear locally as a safety net
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+    } catch {
+      // If global revoke fails (network error), still clear local session
+      await supabase.auth.signOut({ scope: "local" });
+    }
     setUser(null);
     setSession(null);
   }
