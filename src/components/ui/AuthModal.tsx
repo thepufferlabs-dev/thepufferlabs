@@ -1,10 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Provider } from "@supabase/supabase-js";
 import { supabase, getAuthCallbackUrl } from "@/lib/supabase";
 import AvatarCropper from "@/components/ui/AvatarCropper";
 import { showToast } from "@/components/ui/Toast";
+
+const PASSWORD_RULES = [
+  { label: "At least 10 characters", test: (p: string) => p.length >= 10 },
+  { label: "Lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  { label: "Uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
+  { label: "Digit", test: (p: string) => /\d/.test(p) },
+  { label: "Symbol (!@#$...)", test: (p: string) => /[^a-zA-Z0-9]/.test(p) },
+];
+
+function getPasswordStrength(password: string) {
+  const passed = PASSWORD_RULES.filter((r) => r.test(password)).length;
+  if (passed <= 1) return { level: "Weak", color: "#ef4444", percent: 20 };
+  if (passed <= 2) return { level: "Fair", color: "#f97316", percent: 40 };
+  if (passed <= 3) return { level: "Good", color: "#eab308", percent: 60 };
+  if (passed <= 4) return { level: "Strong", color: "#22c55e", percent: 80 };
+  return { level: "Excellent", color: "#2dd4bf", percent: 100 };
+}
 
 type AuthModalProps = {
   open: boolean;
@@ -48,6 +65,8 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
   const [showCropper, setShowCropper] = useState(false);
   const [loading, setLoading] = useState(false);
   const [otpCode, setOtpCode] = useState("");
+
+  const strength = useMemo(() => getPasswordStrength(password), [password]);
 
   function reset() {
     setEmail("");
@@ -148,7 +167,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
 
     setLoading(false);
     setMode("verify_otp");
-    showToast("Check your email for the 6-digit verification code.", "success");
+    showToast("Check your email for the 8-digit verification code.", "success");
   }
 
   async function handleVerifyOtp(e: React.FormEvent) {
@@ -238,7 +257,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
             {mode === "login" && "Sign in to access premium content"}
             {mode === "register" && "Join to unlock premium content"}
             {mode === "forgot" && "Enter your email to reset password"}
-            {mode === "verify_otp" && `Enter the 6-digit code sent to ${email}`}
+            {mode === "verify_otp" && `Enter the 8-digit code sent to ${email}`}
           </p>
         </div>
 
@@ -342,17 +361,54 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
 
             <input type="text" placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} required className={inputClass} style={{ borderColor: "var(--theme-border)" }} />
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className={inputClass} style={{ borderColor: "var(--theme-border)" }} />
-            <input
-              type="password"
-              placeholder="Password (min 6 characters)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className={inputClass}
-              style={{ borderColor: "var(--theme-border)" }}
-            />
-            <button type="submit" disabled={loading} className="rounded-lg bg-teal px-4 py-3 text-sm font-semibold text-btn-text transition-all hover:bg-teal-dark disabled:opacity-50 cursor-pointer">
+            <div className="flex flex-col gap-2">
+              <input
+                type="password"
+                placeholder="Password (min 10 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={10}
+                className={inputClass}
+                style={{ borderColor: "var(--theme-border)" }}
+              />
+              {password.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {/* Strength bar */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-300" style={{ width: `${strength.percent}%`, background: strength.color }} />
+                    </div>
+                    <span className="text-xs font-medium min-w-[60px] text-right" style={{ color: strength.color }}>
+                      {strength.level}
+                    </span>
+                  </div>
+                  {/* Requirements checklist */}
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    {PASSWORD_RULES.map((rule) => {
+                      const passed = rule.test(password);
+                      return (
+                        <span key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: passed ? "#2dd4bf" : "#64748b" }}>
+                          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                            {passed ? (
+                              <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+                            ) : (
+                              <circle cx="8" cy="8" r="3" />
+                            )}
+                          </svg>
+                          {rule.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={loading || PASSWORD_RULES.some((r) => !r.test(password))}
+              className="rounded-lg bg-teal px-4 py-3 text-sm font-semibold text-btn-text transition-all hover:bg-teal-dark disabled:opacity-50 cursor-pointer"
+            >
               {loading ? "Creating account..." : "Create Account"}
             </button>
             <button type="button" onClick={() => switchMode("login")} className="text-sm text-text-muted hover:text-text-primary cursor-pointer">
@@ -381,8 +437,8 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              maxLength={6}
-              placeholder="6-digit code"
+              maxLength={8}
+              placeholder="8-digit code"
               value={otpCode}
               onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
               required
@@ -392,7 +448,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
             />
             <button
               type="submit"
-              disabled={loading || otpCode.length !== 6}
+              disabled={loading || otpCode.length !== 8}
               className="rounded-lg bg-teal px-4 py-3 text-sm font-semibold text-btn-text transition-all hover:bg-teal-dark disabled:opacity-50 cursor-pointer"
             >
               {loading ? "Verifying..." : "Verify Email"}
