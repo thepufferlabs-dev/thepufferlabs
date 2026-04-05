@@ -1,8 +1,10 @@
 import { discoverCourseRepos, getCourseBySlug } from "@/lib/courses/registry";
 import { fetchContentIndex, fetchSidebar, fetchMarkdownContent, getContentEntry, stripFrontmatter } from "@/lib/courses/content-loader";
+import { ensureCourseContentStaticParams, isStaticExportPlaceholderContent } from "@/lib/courses/static-export";
 import MarkdownRenderer from "@/components/docs/MarkdownRenderer";
 import PremiumGate from "@/components/courses/PremiumGate";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 export async function generateStaticParams() {
   const products = await discoverCourseRepos();
@@ -40,7 +42,7 @@ export async function generateStaticParams() {
     }
   }
 
-  return params;
+  return ensureCourseContentStaticParams(params);
 }
 
 interface PageProps {
@@ -49,6 +51,10 @@ interface PageProps {
 
 export default async function ContentPage({ params }: PageProps) {
   const { slug, contentKey } = await params;
+  if (isStaticExportPlaceholderContent(slug, contentKey)) {
+    notFound();
+  }
+
   const product = await getCourseBySlug(slug);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
