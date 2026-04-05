@@ -111,33 +111,66 @@ export default function CourseCatalog({ courses, basePath }: CourseCatalogProps)
 
   const { user } = useAuth();
 
-  // Fetch live pricing from Supabase (prices/flash sales are sensitive — never serve stale)
+  // Fetch live course list from Supabase (so new courses appear without redeployment)
+  const [liveCourseList, setLiveCourseList] = useState<CourseInfo[]>(courses);
   const [livePricing, setLivePricing] = useState<Record<string, { productId: string; priceCents: number; currency: string; comparePriceCents: number | null; flashSale: FlashSale | null; thumbnailPath: string | null }>>({});
 
   // Track which products the user has purchased (entitlements)
   const [ownedProducts, setOwnedProducts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    async function fetchPricing() {
+    async function fetchLiveCourses() {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
       const { data } = await (supabase.from("products") as any)
-        .select("id, slug, price_cents, currency, compare_price_cents, metadata, thumbnail_path")
+        .select("*")
         .eq("product_type", "course")
-        .eq("status", "published") as { data: { id: string; slug: string; price_cents: number; currency: string; compare_price_cents: number | null; metadata: Json; thumbnail_path: string | null }[] | null };
+        .eq("status", "published")
+        .order("title") as { data: any[] | null };
       if (!data) return;
-      const map: typeof livePricing = {};
-      for (const row of data) {
-        map[row.slug] = {
+      const pricingMap: typeof livePricing = {};
+      const courseList: CourseInfo[] = data.map((row: any) => {
+        const flashSale = parseFlashSaleFromMeta(row.metadata);
+        pricingMap[row.slug] = {
           productId: row.id,
           priceCents: row.price_cents,
           currency: row.currency,
           comparePriceCents: row.compare_price_cents,
-          flashSale: parseFlashSaleFromMeta(row.metadata),
+          flashSale,
           thumbnailPath: row.thumbnail_path,
         };
-      }
-      setLivePricing(map);
+        return {
+          title: row.title,
+          slug: row.slug,
+          shortDescription: row.short_description ?? "",
+          category: row.category ?? "",
+          level: row.level ?? "",
+          tags: row.tags ?? [],
+          banner: row.banner_path ?? "",
+          thumbnail: row.thumbnail_path ?? "",
+          repoType: "course",
+          status: row.status,
+          version: row.version ?? "1.0.0",
+          previewDocPaths: [],
+          premiumDocPaths: [],
+          publicBlogPaths: [],
+          premiumBlogPaths: [],
+          sampleCodePaths: [],
+          premiumCodePaths: [],
+          updatedAt: row.updated_at,
+          stars: 0,
+          thumbnailUrl: row.thumbnail_path ? `${supabaseUrl}/storage/v1/object/public/course-assets/${row.thumbnail_path}` : "",
+          freeContentCount: row.free_content_count,
+          premiumContentCount: row.premium_content_count,
+          priceCents: row.price_cents,
+          currency: row.currency,
+          comparePriceCents: row.compare_price_cents,
+          flashSale,
+        } satisfies CourseInfo;
+      });
+      setLiveCourseList(courseList);
+      setLivePricing(pricingMap);
     }
-    fetchPricing();
+    fetchLiveCourses();
   }, []);
 
   // Fetch user entitlements
@@ -153,15 +186,8 @@ export default function CourseCatalog({ courses, basePath }: CourseCatalogProps)
     fetchEntitlements();
   }, [user]);
 
-  // Merge live pricing into static course data
-  const liveCourses = useMemo(() => {
-    if (Object.keys(livePricing).length === 0) return courses;
-    return courses.map((c) => {
-      const live = livePricing[c.slug];
-      if (!live) return c;
-      return { ...c, priceCents: live.priceCents, currency: live.currency, comparePriceCents: live.comparePriceCents, flashSale: live.flashSale };
-    });
-  }, [courses, livePricing]);
+  // Use the live course list (already includes live pricing)
+  const liveCourses = liveCourseList;
 
   // Build value pools for autocomplete
   const valuePools = useMemo(() => {
