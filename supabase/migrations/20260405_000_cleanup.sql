@@ -62,10 +62,10 @@ DROP POLICY IF EXISTS "Service role deletes premium content" ON storage.objects;
 DROP POLICY IF EXISTS "Service role deletes course assets"  ON storage.objects;
 
 -- ---------------------------------------------------------------------------
--- Delete storage buckets and their contents
+-- Storage buckets: remove bucket records only (objects must be emptied via Storage API)
+-- Objects are cleaned separately in the GitHub workflow using the REST API.
 -- ---------------------------------------------------------------------------
 
-DELETE FROM storage.objects WHERE bucket_id IN ('free-content', 'premium-content', 'course-assets');
 DELETE FROM storage.buckets WHERE id IN ('free-content', 'premium-content', 'course-assets');
 
 -- ---------------------------------------------------------------------------
