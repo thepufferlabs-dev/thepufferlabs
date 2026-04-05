@@ -24,11 +24,11 @@ DROP TABLE IF EXISTS products CASCADE;
 -- Drop functions
 -- ---------------------------------------------------------------------------
 
-DROP FUNCTION IF EXISTS on_order_paid();
-DROP FUNCTION IF EXISTS on_subscription_change();
-DROP FUNCTION IF EXISTS update_updated_at();
-DROP FUNCTION IF EXISTS user_has_access(uuid, uuid);
-DROP FUNCTION IF EXISTS user_can_read_content(uuid, uuid);
+DROP FUNCTION IF EXISTS on_order_paid() CASCADE;
+DROP FUNCTION IF EXISTS on_subscription_change() CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at() CASCADE;
+DROP FUNCTION IF EXISTS user_has_access(uuid, uuid) CASCADE;
+DROP FUNCTION IF EXISTS user_can_read_content(uuid, uuid) CASCADE;
 
 -- ---------------------------------------------------------------------------
 -- Drop enums
