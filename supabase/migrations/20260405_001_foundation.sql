@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 -- CRITICAL: without these, OAuth signup breaks with "Database error granting user"
 
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   _provider identity_provider;
   _avatar   text;
@@ -161,7 +161,7 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
 CREATE OR REPLACE FUNCTION handle_user_login()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF OLD.last_sign_in_at IS DISTINCT FROM NEW.last_sign_in_at THEN
     UPDATE profiles
