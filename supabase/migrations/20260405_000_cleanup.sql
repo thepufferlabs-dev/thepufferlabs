@@ -62,11 +62,10 @@ DROP POLICY IF EXISTS "Service role deletes premium content" ON storage.objects;
 DROP POLICY IF EXISTS "Service role deletes course assets"  ON storage.objects;
 
 -- ---------------------------------------------------------------------------
--- Storage buckets: remove bucket records only (objects must be emptied via Storage API)
--- Objects are cleaned separately in the GitHub workflow using the REST API.
+-- Storage: buckets and objects must be managed via the Supabase Storage API.
+-- The GitHub workflow (supabase-clean.yml) handles emptying/deleting buckets
+-- via REST before running this script.
 -- ---------------------------------------------------------------------------
-
-DELETE FROM storage.buckets WHERE id IN ('free-content', 'premium-content', 'course-assets');
 
 -- ---------------------------------------------------------------------------
 -- Done — schema is fully clean, ready for fresh migration
