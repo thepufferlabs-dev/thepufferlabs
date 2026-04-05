@@ -19,11 +19,13 @@ export interface CourseMeta {
   premiumCodePaths: string[];
 }
 
-/** Enriched course data combining meta.json + GitHub API info */
+/** Enriched course data combining product + course details from Supabase */
 export interface CourseInfo extends CourseMeta {
   updatedAt: string;
   stars: number;
   thumbnailUrl: string;
+  freeContentCount: number;
+  premiumContentCount: number;
 }
 
 export interface ContentEntry {

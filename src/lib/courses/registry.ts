@@ -1,93 +1,80 @@
-export interface CourseRegistryEntry {
+import { supabaseServer } from "@/lib/supabase-server";
+import type { Database } from "@/lib/database.types";
+
+type ProductRow = Database["public"]["Tables"]["products"]["Row"];
+
+export interface CourseProduct {
+  id: string;
   slug: string;
-  owner: string;
-  repo: string;
-  branch: string;
+  title: string;
+  shortDescription: string | null;
+  category: string | null;
+  level: string | null;
+  tags: string[];
+  bannerPath: string | null;
+  thumbnailPath: string | null;
+  status: string;
+  version: string | null;
+  freeContentCount: number;
+  premiumContentCount: number;
+  storagePrefix: string | null;
+  updatedAt: string;
+  lastSyncedAt: string | null;
 }
 
-const GITHUB_OWNER = process.env.NEXT_PUBLIC_GITHUB_OWNER ?? "";
-const GITHUB_PAT = process.env.GITHUB_PAT ?? "";
-
-/** Required topics for a repo to be treated as a course */
-const REQUIRED_TOPICS = ["learning-course", "premium-content-repo"];
-
-/**
- * Static fallback registry — used when GitHub API is unreachable.
- * Keep this in sync with your actual course repos.
- */
-const FALLBACK_REGISTRY: CourseRegistryEntry[] = [
-  {
-    slug: "k8s-zero-to-mastery",
-    owner: "senapatisantosh",
-    repo: "k8s-zero-to-mastery",
-    branch: "claude/kubernetes-learning-repo-eSbUG",
-  },
-];
-
-interface GHRepoMinimal {
-  name: string;
-  full_name: string;
-  default_branch: string;
-  topics: string[];
-  archived: boolean;
-  fork: boolean;
-  owner: { login: string };
+function mapProductRow(row: ProductRow): CourseProduct {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    shortDescription: row.short_description,
+    category: row.category,
+    level: row.level,
+    tags: row.tags ?? [],
+    bannerPath: row.banner_path,
+    thumbnailPath: row.thumbnail_path,
+    status: row.status,
+    version: row.version,
+    freeContentCount: row.free_content_count,
+    premiumContentCount: row.premium_content_count,
+    storagePrefix: row.storage_prefix,
+    updatedAt: row.updated_at,
+    lastSyncedAt: row.last_synced_at,
+  };
 }
 
-let _cachedRegistry: CourseRegistryEntry[] | null = null;
-
 /**
- * Discover all course repos by scanning GitHub for repos
- * tagged with both "learning-course" and "premium-content-repo".
+ * Fetch all published courses from Supabase.
+ * Returns empty array if none exist — no fallback.
  */
-export async function discoverCourseRepos(): Promise<CourseRegistryEntry[]> {
-  if (_cachedRegistry) return _cachedRegistry;
+export async function discoverCourseRepos(): Promise<CourseProduct[]> {
+  const { data, error } = await (supabaseServer.from("products") as any)
+    .select("*")
+    .eq("product_type", "course")
+    .eq("status", "published")
+    .order("title") as { data: ProductRow[] | null; error: { message: string } | null };
 
-  try {
-    const headers: HeadersInit = {
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    };
-    if (GITHUB_PAT) headers.Authorization = `Bearer ${GITHUB_PAT}`;
-
-    // Search for repos with both required topics owned by the configured user
-    // GitHub search: topic:learning-course topic:premium-content-repo user:owner
-    const query = `${REQUIRED_TOPICS.map((t) => `topic:${t}`).join("+")}+user:${GITHUB_OWNER}`;
-    const url = `https://api.github.com/search/repositories?q=${query}&per_page=100`;
-
-    const res = await fetch(url, {
-      headers,
-      next: { revalidate: 3600 },
-    });
-
-    if (!res.ok) {
-      console.warn(`[Courses] GitHub search API returned ${res.status}, using fallback registry`);
-      _cachedRegistry = FALLBACK_REGISTRY;
-      return FALLBACK_REGISTRY;
-    }
-
-    const data = await res.json();
-    const repos: GHRepoMinimal[] = data.items ?? [];
-
-    const entries: CourseRegistryEntry[] = repos
-      .filter((r) => !r.archived && !r.fork)
-      .filter((r) => REQUIRED_TOPICS.every((t) => r.topics.includes(t)))
-      .map((r) => ({
-        slug: r.name,
-        owner: r.owner.login,
-        repo: r.name,
-        branch: r.default_branch,
-      }));
-
-    _cachedRegistry = entries.length > 0 ? entries : FALLBACK_REGISTRY;
-    return _cachedRegistry;
-  } catch (err) {
-    console.warn(`[Courses] Failed to discover repos, using fallback:`, err);
-    _cachedRegistry = FALLBACK_REGISTRY;
-    return FALLBACK_REGISTRY;
+  if (error) {
+    console.error("[Courses] Failed to fetch courses from Supabase:", error.message);
+    return [];
   }
+
+  return (data ?? []).map(mapProductRow);
 }
 
-export function getCourseBySlug(slug: string, registry: CourseRegistryEntry[]): CourseRegistryEntry | undefined {
-  return registry.find((c) => c.slug === slug);
+/**
+ * Fetch a single course by slug.
+ * Returns null if not found.
+ */
+export async function getCourseBySlug(slug: string): Promise<CourseProduct | null> {
+  const { data, error } = await (supabaseServer.from("products") as any)
+    .select("*")
+    .eq("slug", slug)
+    .eq("product_type", "course")
+    .eq("status", "published")
+    .single() as { data: ProductRow | null; error: unknown };
+
+  if (error || !data) return null;
+
+  return mapProductRow(data);
 }

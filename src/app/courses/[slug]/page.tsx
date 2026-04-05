@@ -1,10 +1,10 @@
 import { discoverCourseRepos, getCourseBySlug } from "@/lib/courses/registry";
-import { fetchCourseMeta, fetchToc } from "@/lib/courses/content-loader";
+import { fetchToc, fetchContentIndex } from "@/lib/courses/content-loader";
 import Link from "next/link";
 
 export async function generateStaticParams() {
-  const registry = await discoverCourseRepos();
-  return registry.map((entry) => ({ slug: entry.slug }));
+  const products = await discoverCourseRepos();
+  return products.map((p) => ({ slug: p.slug }));
 }
 
 interface PageProps {
@@ -13,15 +13,14 @@ interface PageProps {
 
 export default async function CourseOverviewPage({ params }: PageProps) {
   const { slug } = await params;
-  const registry = await discoverCourseRepos();
-  const entry = getCourseBySlug(slug, registry);
+  const product = await getCourseBySlug(slug);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-  if (!entry) return null;
+  if (!product) return null;
 
-  let meta, toc;
+  let toc, contentIndex;
   try {
-    [meta, toc] = await Promise.all([fetchCourseMeta(entry), fetchToc(entry)]);
+    [toc, contentIndex] = await Promise.all([fetchToc(slug), fetchContentIndex(slug)]);
   } catch {
     return (
       <div className="py-20 text-center">
@@ -30,9 +29,9 @@ export default async function CourseOverviewPage({ params }: PageProps) {
     );
   }
 
-  const freeCount = meta.previewDocPaths.length;
-  const premiumCount = meta.premiumDocPaths.length;
-  const codeExamples = meta.sampleCodePaths.length + meta.premiumCodePaths.length;
+  const freeCount = product.freeContentCount;
+  const premiumCount = product.premiumContentCount;
+  const codeExamples = contentIndex.filter((e) => e.contentType === "code").length;
   const firstFreeKey = toc.toc[0]?.items[0]?.contentKey;
 
   return (
@@ -40,18 +39,22 @@ export default async function CourseOverviewPage({ params }: PageProps) {
       {/* Course Header */}
       <div className="mb-10">
         <div className="flex items-center gap-2 mb-4">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-orange-500/10 text-orange-400 border border-orange-500/20">{meta.category}</span>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-teal/10 text-teal border border-teal/20">
-            {meta.level
-              .split("-")
-              .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(" → ")}
-          </span>
+          {product.category && (
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-orange-500/10 text-orange-400 border border-orange-500/20">{product.category}</span>
+          )}
+          {product.level && (
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-teal/10 text-teal border border-teal/20">
+              {product.level
+                .split("-")
+                .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(" → ")}
+            </span>
+          )}
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-bold text-text-primary tracking-tight mb-4">{meta.title}</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold text-text-primary tracking-tight mb-4">{product.title}</h1>
 
-        <p className="text-text-muted leading-relaxed text-lg mb-6">{meta.shortDescription}</p>
+        <p className="text-text-muted leading-relaxed text-lg mb-6">{product.shortDescription}</p>
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">

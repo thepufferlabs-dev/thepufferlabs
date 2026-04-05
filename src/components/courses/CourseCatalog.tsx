@@ -349,8 +349,8 @@ export default function CourseCatalog({ courses, basePath }: CourseCatalogProps)
 /* ------------------------------------------------------------------ */
 
 function EnhancedCourseCard({ course, basePath }: { course: CourseInfo; basePath: string }) {
-  const freeDoc = course.previewDocPaths.length;
-  const premiumDoc = course.premiumDocPaths.length;
+  const freeDoc = course.freeContentCount ?? course.previewDocPaths.length;
+  const premiumDoc = course.premiumContentCount ?? course.premiumDocPaths.length;
   const totalDoc = freeDoc + premiumDoc;
   const freePercent = totalDoc > 0 ? (freeDoc / totalDoc) * 100 : 0;
 

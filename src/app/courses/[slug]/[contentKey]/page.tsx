@@ -5,19 +5,19 @@ import PremiumGate from "@/components/courses/PremiumGate";
 import Link from "next/link";
 
 export async function generateStaticParams() {
-  const registry = await discoverCourseRepos();
+  const products = await discoverCourseRepos();
   const params: { slug: string; contentKey: string }[] = [];
 
-  for (const entry of registry) {
+  for (const product of products) {
     try {
-      const contentIndex = await fetchContentIndex(entry);
+      const contentIndex = await fetchContentIndex(product.slug);
       for (const item of contentIndex) {
         if (item.isPublished !== false) {
-          params.push({ slug: entry.slug, contentKey: item.contentKey });
+          params.push({ slug: product.slug, contentKey: item.contentKey });
         }
       }
     } catch (err) {
-      console.error(`Failed to generate params for ${entry.slug}:`, err);
+      console.error(`Failed to generate params for ${product.slug}:`, err);
     }
   }
 
@@ -30,11 +30,10 @@ interface PageProps {
 
 export default async function ContentPage({ params }: PageProps) {
   const { slug, contentKey } = await params;
-  const registry = await discoverCourseRepos();
-  const entry = getCourseBySlug(slug, registry);
+  const product = await getCourseBySlug(slug);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-  if (!entry) {
+  if (!product) {
     return (
       <div className="py-20 text-center">
         <h1 className="text-xl font-bold text-text-primary mb-2">Course not found</h1>
@@ -47,7 +46,7 @@ export default async function ContentPage({ params }: PageProps) {
 
   let contentIndex;
   try {
-    contentIndex = await fetchContentIndex(entry);
+    contentIndex = await fetchContentIndex(slug);
   } catch {
     return (
       <div className="py-20 text-center">
@@ -91,13 +90,12 @@ export default async function ContentPage({ params }: PageProps) {
     );
   }
 
-  // Free content: fetch and render markdown
-  // For code entries, sourcePath is a directory — fetch README.md inside it
+  // Free content: fetch from Supabase Storage and render markdown
   const filePath = contentEntry.contentType === "code" ? `${contentEntry.sourcePath}/README.md` : contentEntry.sourcePath;
 
   let markdown: string;
   try {
-    markdown = await fetchMarkdownContent(entry, filePath);
+    markdown = await fetchMarkdownContent(filePath);
     markdown = stripFrontmatter(markdown);
   } catch {
     markdown = `# Failed to Load\n\nCould not load content for **${contentEntry.title}**.`;
@@ -109,10 +107,8 @@ export default async function ContentPage({ params }: PageProps) {
     const srcFile = e.sourcePath.split("/").pop()?.replace(/\.md$/, "") ?? "";
     const route = `${basePath}/courses/${slug}/${e.contentKey}/`;
     linkMap[srcFile] = route;
-    // Also map without numeric prefix: "07-ingress-and-dns" → "ingress-and-dns"
     const stripped = srcFile.replace(/^\d+-/, "");
     if (stripped !== srcFile) linkMap[stripped] = route;
-    // Also map by contentKey directly
     linkMap[e.contentKey] = route;
   }
 

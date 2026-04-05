@@ -1,5 +1,5 @@
 import { discoverCourseRepos } from "@/lib/courses/registry";
-import { fetchCourseInfo } from "@/lib/courses/content-loader";
+import { buildCourseInfo } from "@/lib/courses/content-loader";
 import CourseCatalog from "@/components/courses/CourseCatalog";
 import Link from "next/link";
 
@@ -11,20 +11,8 @@ export const metadata = {
 export default async function CourseCatalogPage() {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-  const registry = await discoverCourseRepos();
-
-  const courses = await Promise.all(
-    registry.map(async (entry) => {
-      try {
-        return await fetchCourseInfo(entry);
-      } catch (err) {
-        console.error(`Failed to fetch course meta for ${entry.slug}:`, err);
-        return null;
-      }
-    })
-  );
-
-  const validCourses = courses.filter((c): c is NonNullable<typeof c> => c !== null);
+  const products = await discoverCourseRepos();
+  const courses = products.map(buildCourseInfo);
 
   return (
     <div className="min-h-screen bg-navy pt-16">
@@ -45,7 +33,7 @@ export default async function CourseCatalogPage() {
 
       {/* Catalog */}
       <main className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
-        <CourseCatalog courses={validCourses} basePath={basePath} />
+        <CourseCatalog courses={courses} basePath={basePath} />
       </main>
 
       {/* Footer */}

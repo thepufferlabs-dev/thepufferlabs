@@ -1,84 +1,67 @@
-import type { CourseRegistryEntry } from "./registry";
-import type { CourseMeta, CourseInfo, Sidebar, Toc, TocPhase, TocItem, ContentEntry } from "./types";
+import { supabaseServer } from "@/lib/supabase-server";
+import type { Database } from "@/lib/database.types";
+import type { CourseProduct } from "./registry";
+import type { CourseInfo, Sidebar, SidebarSection, Toc, TocPhase, TocItem, ContentEntry } from "./types";
 
-const GITHUB_PAT = process.env.GITHUB_PAT ?? "";
+type CourseDetailsRow = Database["public"]["Tables"]["course_details"]["Row"];
+type ProductContentRow = Database["public"]["Tables"]["product_content"]["Row"];
 
-function headers(): HeadersInit {
-  const h: HeadersInit = {
-    Accept: "application/vnd.github.raw+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-  if (GITHUB_PAT) {
-    h.Authorization = `Bearer ${GITHUB_PAT}`;
-  }
-  return h;
+const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+// ── Course Info ─────────────────────────────────────────────
+
+/** Build a public storage URL for course assets */
+function buildAssetUrl(path: string): string {
+  return `${SUPABASE_URL}/storage/v1/object/public/course-assets/${path}`;
 }
 
-async function fetchRepoFile(entry: CourseRegistryEntry, path: string, revalidate = 3600): Promise<string> {
-  const url = `https://api.github.com/repos/${entry.owner}/${entry.repo}/contents/${path}?ref=${entry.branch}`;
-  const res = await fetch(url, {
-    headers: headers(),
-    next: { revalidate },
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${path} from ${entry.repo}: ${res.status}`);
-  }
-
-  return res.text();
-}
-
-async function fetchRepoJson<T>(entry: CourseRegistryEntry, path: string, revalidate = 3600): Promise<T> {
-  const text = await fetchRepoFile(entry, path, revalidate);
-  return JSON.parse(text) as T;
-}
-
-export async function fetchCourseMeta(entry: CourseRegistryEntry): Promise<CourseMeta> {
-  return fetchRepoJson<CourseMeta>(entry, "meta.json");
-}
-
-/** Fetch repo metadata from GitHub API (stars, updated_at) */
-async function fetchRepoInfo(entry: CourseRegistryEntry): Promise<{ stars: number; updatedAt: string }> {
-  try {
-    const url = `https://api.github.com/repos/${entry.owner}/${entry.repo}`;
-    const res = await fetch(url, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(GITHUB_PAT ? { Authorization: `Bearer ${GITHUB_PAT}` } : {}),
-      },
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return { stars: 0, updatedAt: "" };
-    const data = await res.json();
-    return { stars: data.stargazers_count ?? 0, updatedAt: data.updated_at ?? "" };
-  } catch {
-    return { stars: 0, updatedAt: "" };
-  }
-}
-
-/** Build the raw thumbnail URL for a course asset */
-function buildThumbnailUrl(entry: CourseRegistryEntry, assetPath: string): string {
-  return `https://raw.githubusercontent.com/${entry.owner}/${entry.repo}/${entry.branch}/${assetPath}`;
-}
-
-/** Fetch enriched course info: meta.json + GitHub repo data + thumbnail URL */
-export async function fetchCourseInfo(entry: CourseRegistryEntry): Promise<CourseInfo> {
-  const [meta, repoInfo] = await Promise.all([fetchCourseMeta(entry), fetchRepoInfo(entry)]);
-
+/** Map a CourseProduct to the CourseInfo shape consumed by components */
+export function buildCourseInfo(product: CourseProduct): CourseInfo {
   return {
-    ...meta,
-    stars: repoInfo.stars,
-    updatedAt: repoInfo.updatedAt,
-    thumbnailUrl: meta.thumbnail ? buildThumbnailUrl(entry, meta.thumbnail) : "",
+    title: product.title,
+    slug: product.slug,
+    shortDescription: product.shortDescription ?? "",
+    category: product.category ?? "",
+    level: product.level ?? "",
+    tags: product.tags,
+    banner: product.bannerPath ?? "",
+    thumbnail: product.thumbnailPath ?? "",
+    repoType: "course",
+    status: product.status,
+    version: product.version ?? "1.0.0",
+    previewDocPaths: [],
+    premiumDocPaths: [],
+    publicBlogPaths: [],
+    premiumBlogPaths: [],
+    sampleCodePaths: [],
+    premiumCodePaths: [],
+    updatedAt: product.updatedAt,
+    stars: 0,
+    thumbnailUrl: product.thumbnailPath ? buildAssetUrl(product.thumbnailPath) : "",
+    freeContentCount: product.freeContentCount,
+    premiumContentCount: product.premiumContentCount,
   };
 }
 
-export async function fetchSidebar(entry: CourseRegistryEntry): Promise<Sidebar> {
-  const raw = await fetchRepoJson<Record<string, unknown>>(entry, "docs/shared/sidebar.json");
+// ── Sidebar ─────────────────────────────────────────────────
 
-  // Normalize sections: some repos use "sectionKey" instead of "id", and may lack "icon"
-  const sections = ((raw.sections ?? []) as Record<string, unknown>[]).map((s) => {
+export async function fetchSidebar(slug: string): Promise<Sidebar> {
+  const productId = await getProductId(slug);
+  if (!productId) return { projectSlug: slug, sections: [] };
+
+  const { data, error } = await (supabaseServer.from("course_details") as any)
+    .select("sidebar_data, product_id")
+    .eq("product_id", productId)
+    .single() as { data: Pick<CourseDetailsRow, "sidebar_data" | "product_id"> | null; error: unknown };
+
+  if (error || !data) {
+    return { projectSlug: slug, sections: [] };
+  }
+
+  const raw = data.sidebar_data as Record<string, unknown> | null;
+  if (!raw) return { projectSlug: slug, sections: [] };
+
+  const sections = ((raw.sections ?? []) as Record<string, unknown>[]).map((s): SidebarSection => {
     const id = (s.id ?? s.sectionKey ?? "") as string;
     const items = ((s.items ?? []) as Record<string, unknown>[]).map((item) => ({
       contentKey: (item.contentKey ?? "") as string,
@@ -88,40 +71,41 @@ export async function fetchSidebar(entry: CourseRegistryEntry): Promise<Sidebar>
       order: (item.order ?? 0) as number,
     }));
 
-    // Auto-detect premium: section is premium if ALL items are premium
     const premium = (s.premium as boolean | undefined) ?? (items.length > 0 && items.every((i) => i.accessLevel === "premium"));
 
-    return {
-      id,
-      title: (s.title ?? "") as string,
-      icon: (s.icon ?? "") as string,
-      premium,
-      items,
-    };
+    return { id, title: (s.title ?? "") as string, icon: (s.icon ?? "") as string, premium, items };
   });
 
-  return {
-    projectSlug: (raw.projectSlug ?? entry.slug) as string,
-    sections,
-  };
+  return { projectSlug: slug, sections };
 }
 
-export async function fetchToc(entry: CourseRegistryEntry): Promise<Toc> {
-  const raw = await fetchRepoJson<Record<string, unknown>>(entry, "docs/shared/toc.json");
+// ── Table of Contents ───────────────────────────────────────
 
-  // Normalize: some repos use phased "toc" array, others use flat "entries" array
+export async function fetchToc(slug: string): Promise<Toc> {
+  const productId = await getProductId(slug);
+  if (!productId) return { projectSlug: slug, title: "", toc: [] };
+
+  const { data, error } = await (supabaseServer.from("course_details") as any)
+    .select("toc_data")
+    .eq("product_id", productId)
+    .single() as { data: Pick<CourseDetailsRow, "toc_data"> | null; error: unknown };
+
+  if (error || !data) {
+    return { projectSlug: slug, title: "", toc: [] };
+  }
+
+  const raw = data.toc_data as Record<string, unknown> | null;
+  if (!raw) return { projectSlug: slug, title: "", toc: [] };
+
   let phases: TocPhase[];
 
   if (Array.isArray(raw.toc)) {
-    // Phased format: { toc: [{ phase, description, items }] }
     phases = (raw.toc as Record<string, unknown>[]).map((p) => ({
       phase: (p.phase ?? "") as string,
       description: (p.description ?? "") as string,
       items: (p.items ?? []) as TocItem[],
     }));
   } else if (Array.isArray(raw.entries)) {
-    // Flat format: { entries: [{ order, contentKey, title, accessLevel }] }
-    // Group into a single phase
     const entries = raw.entries as TocItem[];
     phases = [
       {
@@ -135,30 +119,75 @@ export async function fetchToc(entry: CourseRegistryEntry): Promise<Toc> {
   }
 
   return {
-    projectSlug: (raw.projectSlug ?? entry.slug) as string,
+    projectSlug: slug,
     title: (raw.title ?? "") as string,
     toc: phases,
   };
 }
 
-export async function fetchContentIndex(entry: CourseRegistryEntry): Promise<ContentEntry[]> {
-  const data = await fetchRepoJson<ContentEntry[] | { items: ContentEntry[] }>(entry, "docs/shared/content-index.json");
-  return Array.isArray(data) ? data : data.items;
+// ── Content Index ───────────────────────────────────────────
+
+export async function fetchContentIndex(slug: string): Promise<ContentEntry[]> {
+  const productId = await getProductId(slug);
+  if (!productId) return [];
+
+  const { data, error } = await (supabaseServer.from("product_content") as any)
+    .select("*")
+    .eq("product_id", productId)
+    .eq("is_published", true)
+    .order("sort_order") as { data: ProductContentRow[] | null; error: unknown };
+
+  if (error || !data) return [];
+
+  return data.map((row): ContentEntry => ({
+    contentKey: row.content_key,
+    title: row.title,
+    section: row.section ?? "",
+    accessLevel: row.access_level as "free" | "premium",
+    contentType: (row.content_type ?? "doc") as "doc" | "blog" | "code",
+    sourceType: "supabase-storage",
+    sourcePath: row.storage_path,
+    routePath: `/courses/${slug}/${row.content_key}`,
+    tags: row.tags ?? [],
+    order: row.sort_order,
+    isPublished: row.is_published,
+    migrationTargetPath: null,
+  }));
 }
 
-export async function fetchMarkdownContent(entry: CourseRegistryEntry, sourcePath: string): Promise<string> {
-  const url = `https://raw.githubusercontent.com/${entry.owner}/${entry.repo}/${entry.branch}/${sourcePath}`;
-  const res = await fetch(url, {
-    headers: GITHUB_PAT ? { Authorization: `Bearer ${GITHUB_PAT}` } : {},
-    next: { revalidate: 300 },
-  });
+// ── Markdown Content ────────────────────────────────────────
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${sourcePath}: ${res.status}`);
+/**
+ * Fetch markdown content from Supabase Storage.
+ * storage_path in product_content is formatted as:
+ *   "free-content/{slug}/docs/free/01-intro.md" or
+ *   "premium-content/{slug}/docs/premium/..."
+ *
+ * Free content bucket is public — fetched via public URL.
+ * Premium content bucket is private — fetched via authenticated download.
+ */
+export async function fetchMarkdownContent(storagePath: string): Promise<string> {
+  // storage_path format: "{bucket}/{slug}/{rest-of-path}"
+  // e.g. "free-content/k8s-zero-to-mastery/docs/free/01-intro.md"
+  const firstSlash = storagePath.indexOf("/");
+  const bucket = storagePath.slice(0, firstSlash);
+  const objectPath = storagePath.slice(firstSlash + 1);
+
+  if (bucket === "free-content" || bucket === "course-assets") {
+    // Public bucket — use public URL
+    const url = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${objectPath}`;
+    const res = await fetch(url, { next: { revalidate: 300 } });
+    if (!res.ok) throw new Error(`Failed to fetch ${storagePath}: ${res.status}`);
+    return res.text();
   }
 
-  return res.text();
+  // Private bucket — use Supabase client download
+  const { data, error } = await supabaseServer.storage.from(bucket).download(objectPath);
+  if (error || !data) throw new Error(`Failed to download ${storagePath}: ${error?.message}`);
+  return data.text();
 }
+
+// ── Helpers ─────────────────────────────────────────────────
 
 export function getContentEntry(entries: ContentEntry[], contentKey: string): ContentEntry | undefined {
   return entries.find((e) => e.contentKey === contentKey);
@@ -169,4 +198,17 @@ export function stripFrontmatter(markdown: string): string {
   const end = markdown.indexOf("---", 3);
   if (end === -1) return markdown;
   return markdown.slice(end + 3).trim();
+}
+
+/** Resolve a product slug to its UUID */
+async function getProductId(slug: string): Promise<string | null> {
+  const { data, error } = await (supabaseServer.from("products") as any)
+    .select("id")
+    .eq("slug", slug)
+    .eq("product_type", "course")
+    .eq("status", "published")
+    .single() as { data: { id: string } | null; error: unknown };
+
+  if (error || !data) return null;
+  return data.id;
 }

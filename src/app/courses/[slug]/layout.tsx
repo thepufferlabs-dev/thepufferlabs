@@ -4,8 +4,8 @@ import CourseSidebar from "@/components/courses/CourseSidebar";
 import Link from "next/link";
 
 export async function generateStaticParams() {
-  const registry = await discoverCourseRepos();
-  return registry.map((entry) => ({ slug: entry.slug }));
+  const products = await discoverCourseRepos();
+  return products.map((p) => ({ slug: p.slug }));
 }
 
 interface LayoutProps {
@@ -15,11 +15,10 @@ interface LayoutProps {
 
 export default async function CourseLayout({ children, params }: LayoutProps) {
   const { slug } = await params;
-  const registry = await discoverCourseRepos();
-  const entry = getCourseBySlug(slug, registry);
+  const product = await getCourseBySlug(slug);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-  if (!entry) {
+  if (!product) {
     return (
       <div className="min-h-screen bg-navy pt-24 flex items-center justify-center">
         <div className="text-center">
@@ -34,7 +33,7 @@ export default async function CourseLayout({ children, params }: LayoutProps) {
 
   let sidebar;
   try {
-    sidebar = await fetchSidebar(entry);
+    sidebar = await fetchSidebar(slug);
   } catch {
     sidebar = { projectSlug: slug, sections: [] };
   }
