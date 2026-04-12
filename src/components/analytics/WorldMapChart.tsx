@@ -62,7 +62,7 @@ export default function EconomicBubbleChart({ data }: Props) {
       xAxis: {
         type: "value",
         name: "GDP Per Capita (US$)",
-        nameLocation: "center",
+        nameLocation: "middle",
         nameGap: 35,
         nameTextStyle: { color: "rgba(255,255,255,0.5)", fontSize: 12 },
         axisLine: { lineStyle: { color: "rgba(255,255,255,0.15)" } },
@@ -75,7 +75,7 @@ export default function EconomicBubbleChart({ data }: Props) {
       yAxis: {
         type: "value",
         name: "Population",
-        nameLocation: "center",
+        nameLocation: "middle",
         nameGap: 65,
         nameTextStyle: { color: "rgba(255,255,255,0.5)", fontSize: 12 },
         axisLine: { show: false },

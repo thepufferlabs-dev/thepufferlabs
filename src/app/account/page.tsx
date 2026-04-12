@@ -12,6 +12,7 @@ import type { Database } from "@/lib/database.types";
 type Section = "profile" | "purchases" | "premium";
 type OrderRow = Database["public"]["Tables"]["orders"]["Row"];
 type OrderWithProduct = OrderRow & { product_title?: string };
+type ProductTitleRow = Pick<Database["public"]["Tables"]["products"]["Row"], "id" | "title">;
 type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 
 const SIDEBAR_ITEMS: { id: Section; label: string; icon: React.ReactNode }[] = [
@@ -90,21 +91,23 @@ export default function AccountPage() {
     if (!user) return;
     setPurchasesLoading(true);
     const { data } = await supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    if (!data) {
+    const orders: OrderRow[] = data ?? [];
+    if (orders.length === 0) {
       setOrders([]);
       setPurchasesLoading(false);
       return;
     }
 
     // Fetch product titles for all orders with product_id
-    const productIds = [...new Set(data.filter((o) => o.product_id).map((o) => o.product_id!))];
+    const productIds = [...new Set(orders.filter((o) => o.product_id).map((o) => o.product_id!))];
     let productMap: Record<string, string> = {};
     if (productIds.length > 0) {
       const { data: products } = await supabase.from("products").select("id, title").in("id", productIds);
-      if (products) productMap = Object.fromEntries(products.map((p) => [p.id, p.title]));
+      const productRows: ProductTitleRow[] = products ?? [];
+      if (productRows.length > 0) productMap = Object.fromEntries(productRows.map((p) => [p.id, p.title]));
     }
 
-    setOrders(data.map((o) => ({ ...o, product_title: o.product_id ? productMap[o.product_id] : undefined })));
+    setOrders(orders.map((o) => ({ ...o, product_title: o.product_id ? productMap[o.product_id] : undefined })));
     setPurchasesLoading(false);
   }, [user]);
 

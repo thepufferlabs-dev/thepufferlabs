@@ -1,7 +1,7 @@
 // World Bank Analytics — Supabase data fetching
 
 import { supabase } from "@/lib/supabase";
-import type { DashboardData, CountrySnapshot, IndicatorTrend } from "./types";
+import { INDICATOR_LABELS, type DashboardData, type CountrySnapshot, type IndicatorTrend } from "./types";
 
 const DEFAULT_COUNTRIES = ["IND", "USA", "CHN", "GBR"];
 
@@ -15,7 +15,7 @@ export async function fetchDashboardData(countries: string[] = DEFAULT_COUNTRIES
     return null;
   }
 
-  return data as DashboardData;
+  return data as unknown as DashboardData;
 }
 
 export async function fetchGdpTrend(countryCode: string): Promise<
@@ -36,7 +36,13 @@ export async function fetchGdpTrend(countryCode: string): Promise<
     return [];
   }
 
-  return data ?? [];
+  return (data ?? []).map((row) => ({
+    year: row.year,
+    gdp: row.gdp ?? 0,
+    gdp_per_capita: row.gdp_per_capita ?? 0,
+    population: row.population ?? 0,
+    gdp_yoy_pct: row.gdp_yoy_pct,
+  }));
 }
 
 export async function fetchCountrySnapshot(countryCode: string): Promise<CountrySnapshot | null> {
@@ -49,7 +55,19 @@ export async function fetchCountrySnapshot(countryCode: string): Promise<Country
     return null;
   }
 
-  return data?.[0] ?? null;
+  const snapshot = data?.[0];
+  if (!snapshot) return null;
+
+  return {
+    country_name: snapshot.country_name ?? countryCode,
+    region: snapshot.region ?? "",
+    income_level: snapshot.income_level ?? "",
+    latest_gdp: snapshot.latest_gdp ?? 0,
+    latest_gdp_per_capita: snapshot.latest_gdp_per_capita ?? 0,
+    latest_population: snapshot.latest_population ?? 0,
+    gdp_cagr_5yr: snapshot.gdp_cagr_5yr,
+    latest_year: snapshot.latest_year ?? 0,
+  };
 }
 
 export async function fetchCompareCountries(indicator: string, countries: string[] = DEFAULT_COUNTRIES): Promise<IndicatorTrend[]> {
@@ -63,7 +81,16 @@ export async function fetchCompareCountries(indicator: string, countries: string
     return [];
   }
 
-  return data ?? [];
+  return (data ?? []).map((row) => ({
+    country_code: row.country_code,
+    country_name: row.country_name,
+    indicator_code: indicator,
+    indicator_name: INDICATOR_LABELS[indicator] ?? indicator,
+    year: row.year,
+    value: row.value,
+    prev_value: null,
+    yoy_change_pct: row.yoy_change_pct,
+  }));
 }
 
 export async function fetchLatestValues() {

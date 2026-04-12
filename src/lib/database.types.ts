@@ -73,6 +73,7 @@ export interface Database {
           phone?: string | null;
           preferences?: Json;
         };
+        Relationships: [];
       };
       user_identities: {
         Row: {
@@ -95,6 +96,7 @@ export interface Database {
           provider_email?: string | null;
           provider_data?: Json;
         };
+        Relationships: [];
       };
       subscriptions: {
         Row: {
@@ -137,6 +139,7 @@ export interface Database {
           current_period_end?: string | null;
           canceled_at?: string | null;
         };
+        Relationships: [];
       };
       audit_log: {
         Row: {
@@ -156,6 +159,7 @@ export interface Database {
           metadata?: Json;
         };
         Update: never;
+        Relationships: [];
       };
       products: {
         Row: {
@@ -230,6 +234,7 @@ export interface Database {
           metadata?: Json;
           version?: string | null;
         };
+        Relationships: [];
       };
       product_content: {
         Row: {
@@ -271,6 +276,7 @@ export interface Database {
           is_published?: boolean;
           metadata?: Json;
         };
+        Relationships: [];
       };
       course_details: {
         Row: {
@@ -311,6 +317,7 @@ export interface Database {
           prerequisites?: string[];
           learning_outcomes?: string[];
         };
+        Relationships: [];
       };
       user_course_progress: {
         Row: {
@@ -330,6 +337,7 @@ export interface Database {
         Update: {
           time_spent_seconds?: number;
         };
+        Relationships: [];
       };
       user_bookmarks: {
         Row: {
@@ -349,6 +357,7 @@ export interface Database {
         Update: {
           note?: string | null;
         };
+        Relationships: [];
       };
       user_entitlements: {
         Row: {
@@ -380,6 +389,7 @@ export interface Database {
           is_active?: boolean;
           metadata?: Json;
         };
+        Relationships: [];
       };
       coupons: {
         Row: {
@@ -433,6 +443,7 @@ export interface Database {
           is_active?: boolean;
           metadata?: Json;
         };
+        Relationships: [];
       };
       bundles: {
         Row: {
@@ -473,6 +484,7 @@ export interface Database {
           valid_until?: string | null;
           metadata?: Json;
         };
+        Relationships: [];
       };
       bundle_products: {
         Row: {
@@ -484,6 +496,7 @@ export interface Database {
           product_id: string;
         };
         Update: never;
+        Relationships: [];
       };
       orders: {
         Row: {
@@ -543,6 +556,7 @@ export interface Database {
           cancel_reason?: string | null;
           metadata?: Json;
         };
+        Relationships: [];
       };
       purchases: {
         Row: {
@@ -582,6 +596,48 @@ export interface Database {
           receipt_url?: string | null;
           metadata?: Json;
         };
+        Relationships: [];
+      };
+      wb_sync_runs: {
+        Row: {
+          run_id: string;
+          status: "running" | "completed" | "failed" | "cancelled";
+          started_at: string;
+          finished_at: string | null;
+          indicators: string[] | null;
+          countries: string[] | null;
+          rows_inserted: number;
+          rows_updated: number;
+          rows_skipped: number;
+          error_message: string | null;
+          metadata: Json;
+        };
+        Insert: {
+          run_id?: string;
+          status?: "running" | "completed" | "failed" | "cancelled";
+          started_at?: string;
+          finished_at?: string | null;
+          indicators?: string[] | null;
+          countries?: string[] | null;
+          rows_inserted?: number;
+          rows_updated?: number;
+          rows_skipped?: number;
+          error_message?: string | null;
+          metadata?: Json;
+        };
+        Update: {
+          status?: "running" | "completed" | "failed" | "cancelled";
+          started_at?: string;
+          finished_at?: string | null;
+          indicators?: string[] | null;
+          countries?: string[] | null;
+          rows_inserted?: number;
+          rows_updated?: number;
+          rows_skipped?: number;
+          error_message?: string | null;
+          metadata?: Json;
+        };
+        Relationships: [];
       };
     };
     Views: {
@@ -589,8 +645,66 @@ export interface Database {
     };
     Functions: {
       has_premium_access: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: boolean;
+      };
+      get_dashboard_data: {
+        Args: {
+          p_countries?: string[] | null;
+        };
+        Returns: Json;
+      };
+      get_gdp_trend: {
+        Args: {
+          p_country: string;
+        };
+        Returns: {
+          year: number;
+          gdp: number | null;
+          gdp_per_capita: number | null;
+          population: number | null;
+          gdp_yoy_pct: number | null;
+        }[];
+      };
+      get_country_snapshot: {
+        Args: {
+          p_country: string;
+        };
+        Returns: {
+          country_name: string | null;
+          region: string | null;
+          income_level: string | null;
+          latest_gdp: number | null;
+          latest_gdp_per_capita: number | null;
+          latest_population: number | null;
+          gdp_cagr_5yr: number | null;
+          latest_year: number | null;
+        }[];
+      };
+      compare_countries: {
+        Args: {
+          p_indicator: string;
+          p_countries: string[];
+        };
+        Returns: {
+          country_code: string;
+          country_name: string;
+          year: number;
+          value: number | null;
+          yoy_change_pct: number | null;
+        }[];
+      };
+      get_latest_values: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          country_code: string;
+          country_name: string;
+          region: string | null;
+          indicator_code: string;
+          indicator_name: string;
+          year: number;
+          value: number | null;
+        }[];
       };
     };
     Enums: {

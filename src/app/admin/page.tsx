@@ -856,10 +856,10 @@ function BundlesSection() {
     setSaving(false);
     showToast("Bundle created", "success");
     setShowCreate(false);
-    const data = await fetchBundlesData();
-    setBundles(data.bundles);
-    setProducts(data.products);
-    setBundleProducts(data.bundleProducts);
+    const refreshedData = await fetchBundlesData();
+    setBundles(refreshedData.bundles);
+    setProducts(refreshedData.products);
+    setBundleProducts(refreshedData.bundleProducts);
   }
 
   async function toggleActive(b: BundleRow) {
