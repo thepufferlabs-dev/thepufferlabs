@@ -21,7 +21,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DATE_RANGE: ${{ github.event.inputs.date_range || '2015:2025' }}
         run: |
-          set -euo pipefail
+          set +e  # Don't abort on individual failures
 
           WB="https://api.worldbank.org/v2"
           INDICATORS=(
@@ -66,7 +66,7 @@ jobs:
             while [ "$PAGE" -le "$PAGES" ]; do
               URL="${WB}/country/all/indicator/${IND}?format=json&per_page=10000&page=${PAGE}&date=${DATE_RANGE}"
 
-              HTTP=$(curl -s -o /tmp/wb_raw.json -w "%{http_code}" --max-time 30 "$URL")
+              HTTP=$(curl -s -o /tmp/wb_raw.json -w "%{http_code}" --max-time 60 "$URL")
 
               if [ "$HTTP" != "200" ]; then
                 echo "FAIL (WB API HTTP $HTTP)"
