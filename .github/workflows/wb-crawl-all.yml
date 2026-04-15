@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       start_batch:
-        description: "Start from batch number (for resuming)"
+        description: "Start from country number (for resuming)"
         default: "1"
   schedule:
     # Weekly full crawl on Sundays at 03:00 UTC
@@ -16,140 +16,141 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
-      - name: Run batched crawl
+      - name: Crawl one country at a time
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          START_BATCH: ${{ github.event.inputs.start_batch || '1' }}
+          START_FROM: ${{ github.event.inputs.start_batch || '1' }}
         run: |
           set +e
 
-          # ─── 2 indicator groups (10 each) to keep payload small ───
-          IND_GROUP_A="NY.GDP.MKTP.CD,NY.GDP.MKTP.KD.ZG,NY.GDP.PCAP.CD,NY.GDP.PCAP.KD.ZG,FP.CPI.TOTL.ZG,NE.TRD.GNFS.ZS,BX.KLT.DINV.CD.WD,SL.UEM.TOTL.ZS,SL.TLF.CACT.ZS,SP.POP.TOTL"
-          IND_GROUP_B="SP.POP.GROW,SP.URB.TOTL.IN.ZS,SP.DYN.LE00.IN,SH.XPD.CHEX.GD.ZS,SE.ADT.LITR.ZS,SE.XPD.TOTL.GD.ZS,EG.USE.ELEC.KH.PC,IT.NET.USER.ZS,EN.ATM.CO2E.PC,NY.GNP.PCAP.CD"
+          # ─── All 20 indicators split into 2 lightweight groups ───
+          GRP_A="NY.GDP.MKTP.CD,NY.GDP.MKTP.KD.ZG,NY.GDP.PCAP.CD,NY.GDP.PCAP.KD.ZG,FP.CPI.TOTL.ZG,NE.TRD.GNFS.ZS,BX.KLT.DINV.CD.WD,SL.UEM.TOTL.ZS,SL.TLF.CACT.ZS,SP.POP.TOTL"
+          GRP_B="SP.POP.GROW,SP.URB.TOTL.IN.ZS,SP.DYN.LE00.IN,SH.XPD.CHEX.GD.ZS,SE.ADT.LITR.ZS,SE.XPD.TOTL.GD.ZS,EG.USE.ELEC.KH.PC,IT.NET.USER.ZS,EN.ATM.CO2E.PC,NY.GNP.PCAP.CD"
 
-          # ─── All ~215 country ISO3 codes (2 per batch) ───────────
-          # East Asia & Pacific
-          EAP=(ASM AUS BRN CHN FJI FSM GUM HKG IDN JPN KHM KIR KOR LAO MAC MHL MMR MNG MNP MYS NCL NRU NZL PHL PLW PNG PRK PYF SGP SLB SYC THA TKL TLS TON TUV TWN VNM VUT WSM)
-          # Europe & Central Asia
-          ECA=(ALB AND ARM AUT AZE BEL BGR BIH BLR CHE CYP CZE DEU DNK ESP EST FIN FRA FRO GBR GEO GRC GRL HRV HUN IMN IRL ISL ITA KAZ KGZ LIE LTU LUX LVA MDA MKD MNE NLD NOR POL PRT ROU RUS SMR SRB SVK SVN SWE TJK TKM TUR UKR UZB XKX)
-          # Latin America & Caribbean
-          LAC=(ABW ARG ATG BHS BLZ BOL BRA BRB CHL COL CRI CUB CUW CYM DMA DOM ECU GRD GTM GUY HND HTI JAM KNA LCA MEX NIC PAN PER PRI PRY SLV SUR SXM TCA TTO URY VCT VEN VGB VIR)
-          # Middle East & North Africa
-          MNA=(ARE BHR DJI DZA EGY IRN IRQ ISR JOR KWT LBN LBY MAR MLT OMN PSE QAT SAU SYR TUN YEM)
-          # North America
-          NAC=(BMU CAN USA)
-          # South Asia
-          SAR=(AFG BGD BTN IND LKA MDV NPL PAK)
-          # Sub-Saharan Africa
-          SSA=(AGO BDI BEN BFA BWA CAF CIV CMR COD COG COM CPV ERI ETH GAB GHA GIN GMB GNB GNQ KEN LBR LSO MDG MLI MOZ MRT MUS MWI NAM NER NGA RWA SDN SEN SLE SOM SSD STP SWZ TCD TGO TZA UGA ZAF ZMB ZWE)
+          # ─── All ~215 countries ─────────────────────────────────
+          COUNTRIES=(
+            ASM AUS BRN CHN FJI FSM GUM HKG IDN JPN KHM KIR KOR LAO MAC
+            MHL MMR MNG MNP MYS NCL NRU NZL PHL PLW PNG PRK PYF SGP SLB
+            SYC THA TKL TLS TON TUV TWN VNM VUT WSM
+            ALB AND ARM AUT AZE BEL BGR BIH BLR CHE CYP CZE DEU DNK ESP
+            EST FIN FRA FRO GBR GEO GRC GRL HRV HUN IMN IRL ISL ITA KAZ
+            KGZ LIE LTU LUX LVA MDA MKD MNE NLD NOR POL PRT ROU RUS SMR
+            SRB SVK SVN SWE TJK TKM TUR UKR UZB XKX
+            ABW ARG ATG BHS BLZ BOL BRA BRB CHL COL CRI CUB CUW CYM DMA
+            DOM ECU GRD GTM GUY HND HTI JAM KNA LCA MEX NIC PAN PER PRI
+            PRY SLV SUR SXM TCA TTO URY VCT VEN VGB VIR
+            ARE BHR DJI DZA EGY IRN IRQ ISR JOR KWT LBN LBY MAR MLT OMN
+            PSE QAT SAU SYR TUN YEM
+            BMU CAN USA
+            AFG BGD BTN IND LKA MDV NPL PAK
+            AGO BDI BEN BFA BWA CAF CIV CMR COD COG COM CPV ERI ETH GAB
+            GHA GIN GMB GNB GNQ KEN LBR LSO MDG MLI MOZ MRT MUS MWI NAM
+            NER NGA RWA SDN SEN SLE SOM SSD STP SWZ TCD TGO TZA UGA ZAF
+            ZMB ZWE
+          )
 
-          ALL_COUNTRIES=("${EAP[@]}" "${ECA[@]}" "${LAC[@]}" "${MNA[@]}" "${NAC[@]}" "${SAR[@]}" "${SSA[@]}")
-
-          COUNTRIES_PER_BATCH=2
-          TOTAL=${#ALL_COUNTRIES[@]}
-          TOTAL_BATCHES=$(( (TOTAL + COUNTRIES_PER_BATCH - 1) / COUNTRIES_PER_BATCH ))
-
+          TOTAL=${#COUNTRIES[@]}
           echo "Total countries: $TOTAL"
-          echo "Countries per batch: $COUNTRIES_PER_BATCH"
-          echo "Indicator groups: 2 (10 each)"
-          echo "Total batches: $TOTAL_BATCHES (x2 indicator groups = $((TOTAL_BATCHES * 2)) API calls)"
-          echo "Starting from batch: $START_BATCH"
+          echo "Strategy: 1 country x 2 indicator groups (10 each) per step"
+          echo "Total API calls: $((TOTAL * 2))"
+          echo "Starting from country: $START_FROM"
           echo ""
 
-          SUCCESS_COUNT=0
-          FAIL_COUNT=0
-          SKIP_COUNT=0
-          TOTAL_ROWS=0
+          OK=0
+          FAIL=0
+          ROWS=0
+          FAILED_LIST=""
 
-          echo "## World Bank Full Crawl" > /tmp/crawl-summary.md
-          echo "" >> /tmp/crawl-summary.md
-          echo "| Batch | Countries | Group | HTTP | Rows | Status |" >> /tmp/crawl-summary.md
-          echo "|-------|-----------|-------|------|------|--------|" >> /tmp/crawl-summary.md
+          echo "## World Bank Full Crawl" > /tmp/summary.md
+          echo "| # | Country | Grp A | Grp B | Rows |" >> /tmp/summary.md
+          echo "|---|---------|-------|-------|------|" >> /tmp/summary.md
 
-          call_sync() {
-            local COUNTRY_CSV="$1"
-            local INDICATOR_CSV="$2"
-            local LABEL="$3"
-            local GROUP_LABEL="$4"
-
-            COUNTRIES_JSON=$(echo "$COUNTRY_CSV" | jq -R 'split(",")')
-            INDICATORS_JSON=$(echo "$INDICATOR_CSV" | jq -R 'split(",")')
-
+          fire() {
+            local CC="$1" IND="$2"
+            local IND_JSON
+            IND_JSON=$(echo "$IND" | jq -R 'split(",")')
             jq -n \
-              --argjson countries "$COUNTRIES_JSON" \
-              --argjson indicators "$INDICATORS_JSON" \
-              --argjson skip_overlap_check true \
-              '{countries: $countries, indicators: $indicators, skip_overlap_check: $skip_overlap_check}' \
-              > /tmp/wb-batch-body.json
+              --arg c "$CC" \
+              --argjson ind "$IND_JSON" \
+              '{countries: [$c], indicators: $ind, skip_overlap_check: true}' \
+              > /tmp/body.json
 
-            HTTP_CODE=$(curl -s -o /tmp/wb-batch-response.json -w "%{http_code}" \
-              --max-time 120 \
-              -X POST \
-              "${SUPABASE_URL}/functions/v1/wb-sync" \
+            local CODE
+            CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+              --max-time 55 \
+              -X POST "${SUPABASE_URL}/functions/v1/wb-sync" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Content-Type: application/json" \
-              -d @/tmp/wb-batch-body.json)
+              -d @/tmp/body.json)
 
-            RESPONSE=$(cat /tmp/wb-batch-response.json 2>/dev/null || echo "{}")
-            ROWS=$(echo "$RESPONSE" | jq -r '.rows_inserted // 0' 2>/dev/null || echo "0")
-
-            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-              echo "  $GROUP_LABEL: $HTTP_CODE OK ($ROWS rows)"
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              TOTAL_ROWS=$((TOTAL_ROWS + ROWS))
-              echo "| $LABEL | $COUNTRY_CSV | $GROUP_LABEL | $HTTP_CODE | $ROWS | OK |" >> /tmp/crawl-summary.md
-            else
-              echo "  $GROUP_LABEL: HTTP $HTTP_CODE FAILED"
-              FAIL_COUNT=$((FAIL_COUNT + 1))
-              echo "| $LABEL | $COUNTRY_CSV | $GROUP_LABEL | $HTTP_CODE | - | FAILED |" >> /tmp/crawl-summary.md
-            fi
+            local R
+            R=$(jq -r '.rows_inserted // 0' /tmp/resp.json 2>/dev/null || echo 0)
+            echo "${CODE}:${R}"
           }
 
-          for (( batch=1; batch<=TOTAL_BATCHES; batch++ )); do
-            if [ "$batch" -lt "$START_BATCH" ]; then
-              SKIP_COUNT=$((SKIP_COUNT + 1))
-              continue
+          for (( i=0; i<TOTAL; i++ )); do
+            NUM=$((i + 1))
+            if [ "$NUM" -lt "$START_FROM" ]; then continue; fi
+
+            CC="${COUNTRIES[$i]}"
+            printf "%-4s %-3s " "$NUM." "$CC"
+
+            # Group A
+            RES_A=$(fire "$CC" "$GRP_A")
+            CODE_A="${RES_A%%:*}"
+            ROWS_A="${RES_A##*:}"
+
+            sleep 2
+
+            # Group B
+            RES_B=$(fire "$CC" "$GRP_B")
+            CODE_B="${RES_B%%:*}"
+            ROWS_B="${RES_B##*:}"
+
+            BATCH_ROWS=$((ROWS_A + ROWS_B))
+            STATUS_A=$( [ "$CODE_A" -ge 200 ] && [ "$CODE_A" -lt 300 ] 2>/dev/null && echo "ok" || echo "FAIL" )
+            STATUS_B=$( [ "$CODE_B" -ge 200 ] && [ "$CODE_B" -lt 300 ] 2>/dev/null && echo "ok" || echo "FAIL" )
+
+            echo "A:${CODE_A}(${ROWS_A}) B:${CODE_B}(${ROWS_B}) = ${BATCH_ROWS} rows"
+
+            if [ "$STATUS_A" = "ok" ] && [ "$STATUS_B" = "ok" ]; then
+              OK=$((OK + 1))
+              ROWS=$((ROWS + BATCH_ROWS))
+              echo "| $NUM | $CC | $CODE_A ($ROWS_A) | $CODE_B ($ROWS_B) | $BATCH_ROWS |" >> /tmp/summary.md
+            elif [ "$STATUS_A" = "ok" ] || [ "$STATUS_B" = "ok" ]; then
+              OK=$((OK + 1))
+              FAIL=$((FAIL + 1))
+              ROWS=$((ROWS + BATCH_ROWS))
+              FAILED_LIST="${FAILED_LIST} ${CC}"
+              echo "| $NUM | $CC | $CODE_A ($ROWS_A) | $CODE_B ($ROWS_B) | $BATCH_ROWS (partial) |" >> /tmp/summary.md
+            else
+              FAIL=$((FAIL + 1))
+              FAILED_LIST="${FAILED_LIST} ${CC}"
+              echo "| $NUM | $CC | $CODE_A | $CODE_B | FAILED |" >> /tmp/summary.md
             fi
 
-            START_IDX=$(( (batch - 1) * COUNTRIES_PER_BATCH ))
-            BATCH_COUNTRIES=("${ALL_COUNTRIES[@]:$START_IDX:$COUNTRIES_PER_BATCH}")
-            COUNTRY_CSV=$(IFS=,; echo "${BATCH_COUNTRIES[*]}")
-
-            echo "━━━ Batch $batch/$TOTAL_BATCHES: $COUNTRY_CSV ━━━"
-
-            # Group A: economy, trade, employment, population
-            call_sync "$COUNTRY_CSV" "$IND_GROUP_A" "$batch/$TOTAL_BATCHES" "A"
-            sleep 3
-
-            # Group B: health, education, infra, climate
-            call_sync "$COUNTRY_CSV" "$IND_GROUP_B" "$batch/$TOTAL_BATCHES" "B"
-
-            # Pause between country batches
-            if [ "$batch" -lt "$TOTAL_BATCHES" ]; then
-              sleep 3
-            fi
+            # Short pause between countries
+            if [ "$i" -lt "$((TOTAL - 1))" ]; then sleep 2; fi
           done
 
           echo ""
-          echo "============================================"
-          echo "CRAWL COMPLETE"
-          echo "  Successful calls: $SUCCESS_COUNT"
-          echo "  Failed calls:     $FAIL_COUNT"
-          echo "  Skipped batches:  $SKIP_COUNT"
-          echo "  Total rows:       $TOTAL_ROWS"
-          echo "============================================"
-
-          echo "" >> /tmp/crawl-summary.md
-          echo "### Summary" >> /tmp/crawl-summary.md
-          echo "- **Successful:** $SUCCESS_COUNT / $((TOTAL_BATCHES * 2))" >> /tmp/crawl-summary.md
-          echo "- **Failed:** $FAIL_COUNT" >> /tmp/crawl-summary.md
-          echo "- **Total rows upserted:** $TOTAL_ROWS" >> /tmp/crawl-summary.md
-          echo "- **Completed at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> /tmp/crawl-summary.md
-
-          cat /tmp/crawl-summary.md >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$SUCCESS_COUNT" -eq 0 ] && [ "$FAIL_COUNT" -gt 0 ]; then
-            echo "::error::All calls failed"
-            exit 1
+          echo "==============================="
+          echo "DONE  ok=$OK  fail=$FAIL  rows=$ROWS"
+          if [ -n "$FAILED_LIST" ]; then
+            echo "Failed countries:$FAILED_LIST"
           fi
+          echo "==============================="
+
+          echo "" >> /tmp/summary.md
+          echo "### Result" >> /tmp/summary.md
+          echo "- **OK:** $OK / $TOTAL" >> /tmp/summary.md
+          echo "- **Failed:** $FAIL" >> /tmp/summary.md
+          echo "- **Total rows:** $ROWS" >> /tmp/summary.md
+          if [ -n "$FAILED_LIST" ]; then
+            echo "- **Retry needed:**$FAILED_LIST" >> /tmp/summary.md
+          fi
+          echo "- **Finished:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> /tmp/summary.md
+          cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$OK" -eq 0 ] && [ "$FAIL" -gt 0 ]; then exit 1; fi

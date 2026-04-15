@@ -8,10 +8,11 @@ on:
         required: true
         type: choice
         options:
+          - wb-data-only
           - features-only
           - features-and-data
           - nuclear
-        default: features-only
+        default: wb-data-only
       confirm:
         description: 'Type "DELETE" to confirm (or "NUCLEAR DELETE" for nuclear)'
         required: true
@@ -66,6 +67,33 @@ jobs:
               -H "Content-Type: application/json")
             [ "$code" = "200" ] && echo "Emptied: $bucket" || echo "Skip: $bucket (HTTP $code)"
           done
+
+      # Step 2w: wb-data-only — wipe crawled data, keep schema + reference tables
+      - name: "Clean: World Bank data only"
+        if: inputs.scope == 'wb-data-only'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          echo "Wiping WB crawled data (keeping countries + indicators seeds)..."
+          supabase db query --linked <<'SQL'
+          -- Wipe crawled data
+          TRUNCATE wb_raw_observations;
+          TRUNCATE wb_indicator_values;
+          TRUNCATE wb_sync_runs;
+
+          -- Wipe operational tables if they exist
+          DO $$ BEGIN EXECUTE 'TRUNCATE crawl_batches'; EXCEPTION WHEN undefined_table THEN NULL; END $$;
+          DO $$ BEGIN EXECUTE 'TRUNCATE data_quality_checks'; EXCEPTION WHEN undefined_table THEN NULL; END $$;
+
+          -- Refresh materialized views (will be empty)
+          DO $$ BEGIN REFRESH MATERIALIZED VIEW mv_country_year_summary; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+          DO $$ BEGIN REFRESH MATERIALIZED VIEW mv_indicator_trends; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+          DO $$ BEGIN REFRESH MATERIALIZED VIEW mv_indicator_coverage; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+          SQL
+
+          echo "Done. WB data wiped. Reference tables (wb_countries, wb_indicators) preserved."
+          echo "Next: re-run 'World Bank Full Crawl' workflow."
 
       # Step 2a: features-only — drop product/commerce tables, keep auth intact
       - name: "Clean: features-only (domains 2-5)"
@@ -130,7 +158,14 @@ jobs:
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Scope | \`${{ inputs.scope }}\` |" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ inputs.scope }}" = "features-only" ]; then
+          if [ "${{ inputs.scope }}" = "wb-data-only" ]; then
+            echo "| Auth | Preserved |" >> $GITHUB_STEP_SUMMARY
+            echo "| Users | Preserved |" >> $GITHUB_STEP_SUMMARY
+            echo "| Products | Preserved |" >> $GITHUB_STEP_SUMMARY
+            echo "| WB Countries/Indicators | Preserved (seeds) |" >> $GITHUB_STEP_SUMMARY
+            echo "| WB Crawled Data | **WIPED** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Next step | Re-run World Bank Full Crawl |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.scope }}" = "features-only" ]; then
             echo "| Auth | Preserved |" >> $GITHUB_STEP_SUMMARY
             echo "| Users | Preserved |" >> $GITHUB_STEP_SUMMARY
             echo "| Products | Dropped |" >> $GITHUB_STEP_SUMMARY

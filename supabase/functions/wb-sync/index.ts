@@ -30,7 +30,7 @@ const DEFAULT_INDICATORS = [
 ];
 const PER_PAGE = 1000;
 const MAX_RETRIES = 3;
-const RATE_LIMIT_DELAY_MS = 1000; // 1s between API calls
+const RATE_LIMIT_DELAY_MS = 300; // 300ms between API calls (WB API handles ~3 req/s fine)
 
 // ─── Types ───────────────────────────────────────────────────
 interface WBApiMetadata {
@@ -118,7 +118,7 @@ async function fetchIndicatorData(
   while (page <= totalPages) {
     const url =
       `${WB_API_BASE}/country/${countryList}/indicator/${indicator}` +
-      `?format=json&per_page=${PER_PAGE}&page=${page}&date=2000:2025`;
+      `?format=json&per_page=${PER_PAGE}&page=${page}&date=2015:2025`;
 
     log("info", "Fetching page", { indicator, page, url });
     const resp = await fetchWithRetry(url);
