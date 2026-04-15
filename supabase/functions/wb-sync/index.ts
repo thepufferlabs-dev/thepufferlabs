@@ -214,8 +214,12 @@ async function upsertIndicatorValues(
 
 // ─── Overlap Guard ───────────────────────────────────────────
 async function checkOverlappingRun(
-  supabase: ReturnType<typeof createClient>
+  supabase: ReturnType<typeof createClient>,
+  skipCheck = false
 ): Promise<boolean> {
+  // Batch crawls skip the overlap check — each batch is independent
+  if (skipCheck) return false;
+
   const { data } = await supabase
     .from("wb_sync_runs")
     .select("run_id, started_at")
@@ -226,8 +230,8 @@ async function checkOverlappingRun(
   if (data && data.length > 0) {
     const runningFor =
       Date.now() - new Date(data[0].started_at).getTime();
-    // Allow if stuck > 30 min (stale lock)
-    if (runningFor < 30 * 60 * 1000) {
+    // Allow if stuck > 2 min (stale lock from crashed function)
+    if (runningFor < 2 * 60 * 1000) {
       log("warn", "Overlapping run detected", {
         existing_run: data[0].run_id,
         running_for_ms: runningFor,
@@ -263,6 +267,7 @@ Deno.serve(async (req) => {
   let indicators = DEFAULT_INDICATORS;
   let batchId: string | null = null;
   let source = "world_bank";
+  let skipOverlapCheck = false;
   try {
     if (req.method === "POST") {
       const body = await req.json();
@@ -270,13 +275,14 @@ Deno.serve(async (req) => {
       if (body.indicators?.length) indicators = body.indicators;
       if (body.batch_id) batchId = body.batch_id;
       if (body.source) source = body.source;
+      if (body.skip_overlap_check) skipOverlapCheck = true;
     }
   } catch {
     // Use defaults
   }
 
-  // Guard against overlapping runs
-  if (await checkOverlappingRun(supabase)) {
+  // Guard against overlapping runs (skipped during batch crawls)
+  if (await checkOverlappingRun(supabase, skipOverlapCheck)) {
     return new Response(
       JSON.stringify({ error: "Another sync is already running" }),
       { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
