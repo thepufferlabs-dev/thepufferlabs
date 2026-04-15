@@ -1,8 +1,27 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import * as echarts from "echarts";
 import { COUNTRY_COLORS, type IndicatorTrend } from "@/lib/wb/types";
+
+function isDarkTheme() {
+  return document.documentElement.getAttribute("data-theme") !== "light";
+}
+
+function themeColors() {
+  const dark = isDarkTheme();
+  return {
+    text: dark ? "rgba(255,255,255,0.92)" : "rgba(15,23,42,0.88)",
+    textMuted: dark ? "rgba(255,255,255,0.7)" : "rgba(15,23,42,0.6)",
+    textDim: dark ? "rgba(255,255,255,0.6)" : "rgba(15,23,42,0.5)",
+    textFaint: dark ? "rgba(255,255,255,0.5)" : "rgba(15,23,42,0.4)",
+    axisLine: dark ? "rgba(255,255,255,0.15)" : "rgba(15,23,42,0.12)",
+    splitLine: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)",
+    tooltipBg: dark ? "rgba(15,20,35,0.95)" : "rgba(255,255,255,0.96)",
+    tooltipBorder: dark ? "rgba(78,205,196,0.2)" : "rgba(15,23,42,0.1)",
+    tooltipText: dark ? "#e0e0e0" : "#1e293b",
+  };
+}
 
 interface Props {
   data: IndicatorTrend[];
@@ -13,13 +32,14 @@ export default function YoYGrowthChart({ data, title }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
 
-  useEffect(() => {
+  const buildChart = useCallback(() => {
     if (!chartRef.current || !data.length) return;
 
     if (!chartInstance.current) {
       chartInstance.current = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
     }
 
+    const c = themeColors();
     const countries = [...new Set(data.map((d) => d.country_code))];
     const years = [...new Set(data.map((d) => d.year))].sort();
 
@@ -47,13 +67,13 @@ export default function YoYGrowthChart({ data, title }: Props) {
       title: {
         text: title,
         left: "center",
-        textStyle: { color: "rgba(255,255,255,0.92)", fontSize: 18, fontWeight: 600 },
+        textStyle: { color: c.text, fontSize: 18, fontWeight: 600 },
       },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "rgba(15,20,35,0.95)",
-        borderColor: "rgba(78,205,196,0.2)",
-        textStyle: { color: "#e0e0e0", fontSize: 13 },
+        backgroundColor: c.tooltipBg,
+        borderColor: c.tooltipBorder,
+        textStyle: { color: c.tooltipText, fontSize: 13 },
         formatter: (params: unknown) => {
           const arr = params as { seriesName: string; value: number; color: string; axisValue: string }[];
           if (!Array.isArray(arr)) return "";
@@ -74,23 +94,23 @@ export default function YoYGrowthChart({ data, title }: Props) {
       },
       legend: {
         bottom: 10,
-        textStyle: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
+        textStyle: { color: c.textMuted, fontSize: 12 },
         icon: "circle",
       },
       grid: { left: 60, right: 30, top: 60, bottom: 60 },
       xAxis: {
         type: "category",
         data: years.map(String),
-        axisLine: { lineStyle: { color: "rgba(255,255,255,0.15)" } },
-        axisLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, rotate: 45 },
+        axisLine: { lineStyle: { color: c.axisLine } },
+        axisLabel: { color: c.textDim, fontSize: 11, rotate: 45 },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
         axisLine: { show: false },
-        splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
+        splitLine: { lineStyle: { color: c.splitLine } },
         axisLabel: {
-          color: "rgba(255,255,255,0.5)",
+          color: c.textFaint,
           fontSize: 11,
           formatter: (v: number) => `${v}%`,
         },
@@ -104,6 +124,23 @@ export default function YoYGrowthChart({ data, title }: Props) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [data, title]);
+
+  useEffect(() => {
+    buildChart();
+  }, [buildChart]);
+
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === "data-theme") {
+          buildChart();
+          break;
+        }
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [buildChart]);
 
   useEffect(() => {
     return () => {

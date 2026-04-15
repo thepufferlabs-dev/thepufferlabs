@@ -1,8 +1,27 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import * as echarts from "echarts";
 import { COUNTRY_COLORS, formatValue, type LatestValue } from "@/lib/wb/types";
+
+function isDarkTheme() {
+  return document.documentElement.getAttribute("data-theme") !== "light";
+}
+
+function themeColors() {
+  const dark = isDarkTheme();
+  return {
+    text: dark ? "rgba(255,255,255,0.92)" : "rgba(15,23,42,0.88)",
+    textMuted: dark ? "rgba(255,255,255,0.7)" : "rgba(15,23,42,0.6)",
+    textFaint: dark ? "rgba(255,255,255,0.5)" : "rgba(15,23,42,0.4)",
+    axisLine: dark ? "rgba(255,255,255,0.15)" : "rgba(15,23,42,0.12)",
+    splitLine: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)",
+    splitLineFaint: dark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.05)",
+    tooltipBg: dark ? "rgba(15,20,35,0.95)" : "rgba(255,255,255,0.96)",
+    tooltipBorder: dark ? "rgba(78,205,196,0.2)" : "rgba(15,23,42,0.1)",
+    tooltipText: dark ? "#e0e0e0" : "#1e293b",
+  };
+}
 
 // GDP vs Population bubble chart — conveys economic weight at a glance
 interface Props {
@@ -13,13 +32,14 @@ export default function EconomicBubbleChart({ data }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
 
-  useEffect(() => {
+  const buildChart = useCallback(() => {
     if (!chartRef.current || !data.length) return;
 
     if (!chartInstance.current) {
       chartInstance.current = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
     }
 
+    const c = themeColors();
     // Group by country
     const countries = [...new Set(data.map((d) => d.country_code))];
     const seriesData = countries.map((code) => {
@@ -43,13 +63,13 @@ export default function EconomicBubbleChart({ data }: Props) {
         text: "Economic Weight: GDP Per Capita vs Population",
         subtext: "Bubble size = Total GDP",
         left: "center",
-        textStyle: { color: "rgba(255,255,255,0.92)", fontSize: 18, fontWeight: 600 },
-        subtextStyle: { color: "rgba(255,255,255,0.5)", fontSize: 12 },
+        textStyle: { color: c.text, fontSize: 18, fontWeight: 600 },
+        subtextStyle: { color: c.textFaint, fontSize: 12 },
       },
       tooltip: {
-        backgroundColor: "rgba(15,20,35,0.95)",
-        borderColor: "rgba(78,205,196,0.2)",
-        textStyle: { color: "#e0e0e0", fontSize: 13 },
+        backgroundColor: c.tooltipBg,
+        borderColor: c.tooltipBorder,
+        textStyle: { color: c.tooltipText, fontSize: 13 },
         formatter: (params: unknown) => {
           const p = params as { name: string; value: number[] };
           return `<div style="font-weight:600;margin-bottom:4px">${p.name}</div>
@@ -64,26 +84,26 @@ export default function EconomicBubbleChart({ data }: Props) {
         name: "GDP Per Capita (US$)",
         nameLocation: "middle",
         nameGap: 35,
-        nameTextStyle: { color: "rgba(255,255,255,0.5)", fontSize: 12 },
-        axisLine: { lineStyle: { color: "rgba(255,255,255,0.15)" } },
+        nameTextStyle: { color: c.textFaint, fontSize: 12 },
+        axisLine: { lineStyle: { color: c.axisLine } },
         axisLabel: {
-          color: "rgba(255,255,255,0.5)",
+          color: c.textFaint,
           formatter: (v: number) => formatValue(v, "NY.GDP.PCAP.CD"),
         },
-        splitLine: { lineStyle: { color: "rgba(255,255,255,0.04)" } },
+        splitLine: { lineStyle: { color: c.splitLineFaint } },
       },
       yAxis: {
         type: "value",
         name: "Population",
         nameLocation: "middle",
         nameGap: 65,
-        nameTextStyle: { color: "rgba(255,255,255,0.5)", fontSize: 12 },
+        nameTextStyle: { color: c.textFaint, fontSize: 12 },
         axisLine: { show: false },
         axisLabel: {
-          color: "rgba(255,255,255,0.5)",
+          color: c.textFaint,
           formatter: (v: number) => formatValue(v, "SP.POP.TOTL"),
         },
-        splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
+        splitLine: { lineStyle: { color: c.splitLine } },
       },
       series: [
         {
@@ -97,7 +117,7 @@ export default function EconomicBubbleChart({ data }: Props) {
             show: true,
             formatter: (p: { name: string }) => p.name,
             position: "top",
-            color: "rgba(255,255,255,0.7)",
+            color: c.textMuted,
             fontSize: 12,
           },
           emphasis: { scale: 1.3 },
@@ -111,6 +131,23 @@ export default function EconomicBubbleChart({ data }: Props) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [data]);
+
+  useEffect(() => {
+    buildChart();
+  }, [buildChart]);
+
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === "data-theme") {
+          buildChart();
+          break;
+        }
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [buildChart]);
 
   useEffect(() => {
     return () => {
