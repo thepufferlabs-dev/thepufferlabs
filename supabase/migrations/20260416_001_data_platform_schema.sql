@@ -59,6 +59,19 @@ EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 
 -- ============================================================
+-- 2b. EXPAND wb_sync_runs — add source and batch_id columns
+-- ============================================================
+DO $$ BEGIN
+    ALTER TABLE wb_sync_runs ADD COLUMN source TEXT DEFAULT 'world_bank';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE wb_sync_runs ADD COLUMN batch_id UUID;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- ============================================================
 -- 3. SEED wb_countries — All ~217 World Bank countries
 -- ============================================================
 

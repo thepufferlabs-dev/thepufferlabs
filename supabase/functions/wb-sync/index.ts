@@ -284,13 +284,20 @@ Deno.serve(async (req) => {
   }
 
   // Create sync run record
+  // Core fields that always exist on wb_sync_runs
   const runInsert: Record<string, unknown> = {
     status: "running",
     indicators,
     countries,
-    source,
   };
-  if (batchId) runInsert.batch_id = batchId;
+  // Optional fields (added by 20260416 migration) — include in metadata
+  // so the insert doesn't fail if columns don't exist yet
+  runInsert.metadata = JSON.stringify({
+    source,
+    batch_id: batchId,
+    indicator_count: indicators.length,
+    country_count: countries.length,
+  });
 
   const { data: runData, error: runError } = await supabase
     .from("wb_sync_runs")
