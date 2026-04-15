@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { COUNTRY_COLORS, formatValue, type LatestValue } from "@/lib/wb/types";
 
@@ -23,137 +23,108 @@ function themeColors() {
   };
 }
 
-// GDP vs Population bubble chart — conveys economic weight at a glance
 interface Props {
   data: LatestValue[];
 }
 
+function buildOption(data: LatestValue[]): echarts.EChartsOption {
+  const c = themeColors();
+  const countries = [...new Set(data.map((d) => d.country_code))];
+
+  const seriesData = countries.map((code) => {
+    const gdp = data.find((d) => d.country_code === code && d.indicator_code === "NY.GDP.MKTP.CD");
+    const pop = data.find((d) => d.country_code === code && d.indicator_code === "SP.POP.TOTL");
+    const gdpPc = data.find((d) => d.country_code === code && d.indicator_code === "NY.GDP.PCAP.CD");
+    return {
+      name: gdp?.country_name ?? code,
+      value: [gdpPc?.value ?? 0, pop?.value ?? 0, gdp?.value ?? 0],
+      itemStyle: { color: COUNTRY_COLORS[code] ?? "#888" },
+    };
+  });
+
+  return {
+    backgroundColor: "transparent",
+    title: {
+      text: "Economic Weight: GDP Per Capita vs Population",
+      subtext: "Bubble size = Total GDP",
+      left: "center",
+      textStyle: { color: c.text, fontSize: 18, fontWeight: 600 },
+      subtextStyle: { color: c.textFaint, fontSize: 12 },
+    },
+    tooltip: {
+      backgroundColor: c.tooltipBg,
+      borderColor: c.tooltipBorder,
+      textStyle: { color: c.tooltipText, fontSize: 13 },
+      formatter: (params: unknown) => {
+        const p = params as { name: string; value: number[] };
+        return `<div style="font-weight:600;margin-bottom:4px">${p.name}</div>
+          <div>GDP/Capita: ${formatValue(p.value[0], "NY.GDP.PCAP.CD")}</div>
+          <div>Population: ${formatValue(p.value[1], "SP.POP.TOTL")}</div>
+          <div>Total GDP: ${formatValue(p.value[2], "NY.GDP.MKTP.CD")}</div>`;
+      },
+    },
+    grid: { left: 90, right: 40, top: 80, bottom: 60 },
+    xAxis: {
+      type: "value",
+      name: "GDP Per Capita (US$)",
+      nameLocation: "middle",
+      nameGap: 35,
+      nameTextStyle: { color: c.textFaint, fontSize: 12 },
+      axisLine: { lineStyle: { color: c.axisLine } },
+      axisLabel: { color: c.textFaint, formatter: (v: number) => formatValue(v, "NY.GDP.PCAP.CD") },
+      splitLine: { lineStyle: { color: c.splitLineFaint } },
+    },
+    yAxis: {
+      type: "value",
+      name: "Population",
+      nameLocation: "middle",
+      nameGap: 65,
+      nameTextStyle: { color: c.textFaint, fontSize: 12 },
+      axisLine: { show: false },
+      axisLabel: { color: c.textFaint, formatter: (v: number) => formatValue(v, "SP.POP.TOTL") },
+      splitLine: { lineStyle: { color: c.splitLine } },
+    },
+    series: [
+      {
+        type: "scatter",
+        data: seriesData,
+        symbolSize: (val: number[]) => Math.max(20, Math.min(80, Math.log10(val[2]) * 6)),
+        label: {
+          show: true,
+          formatter: (p: { name: string }) => p.name,
+          position: "top",
+          color: c.textMuted,
+          fontSize: 12,
+        },
+        emphasis: { scale: 1.3 },
+      },
+    ],
+  };
+}
+
 export default function EconomicBubbleChart({ data }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts | null>(null);
 
-  const buildChart = useCallback(() => {
+  useEffect(() => {
     if (!chartRef.current || !data.length) return;
 
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
-    }
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
+    chart.setOption(buildOption(data), true);
 
-    const c = themeColors();
-    // Group by country
-    const countries = [...new Set(data.map((d) => d.country_code))];
-    const seriesData = countries.map((code) => {
-      const gdp = data.find((d) => d.country_code === code && d.indicator_code === "NY.GDP.MKTP.CD");
-      const pop = data.find((d) => d.country_code === code && d.indicator_code === "SP.POP.TOTL");
-      const gdpPc = data.find((d) => d.country_code === code && d.indicator_code === "NY.GDP.PCAP.CD");
-      return {
-        name: gdp?.country_name ?? code,
-        value: [
-          gdpPc?.value ?? 0, // x: GDP per capita
-          pop?.value ?? 0, // y: Population
-          gdp?.value ?? 0, // size: GDP
-        ],
-        itemStyle: { color: COUNTRY_COLORS[code] ?? "#888" },
-      };
-    });
-
-    const option: echarts.EChartsOption = {
-      backgroundColor: "transparent",
-      title: {
-        text: "Economic Weight: GDP Per Capita vs Population",
-        subtext: "Bubble size = Total GDP",
-        left: "center",
-        textStyle: { color: c.text, fontSize: 18, fontWeight: 600 },
-        subtextStyle: { color: c.textFaint, fontSize: 12 },
-      },
-      tooltip: {
-        backgroundColor: c.tooltipBg,
-        borderColor: c.tooltipBorder,
-        textStyle: { color: c.tooltipText, fontSize: 13 },
-        formatter: (params: unknown) => {
-          const p = params as { name: string; value: number[] };
-          return `<div style="font-weight:600;margin-bottom:4px">${p.name}</div>
-            <div>GDP/Capita: ${formatValue(p.value[0], "NY.GDP.PCAP.CD")}</div>
-            <div>Population: ${formatValue(p.value[1], "SP.POP.TOTL")}</div>
-            <div>Total GDP: ${formatValue(p.value[2], "NY.GDP.MKTP.CD")}</div>`;
-        },
-      },
-      grid: { left: 90, right: 40, top: 80, bottom: 60 },
-      xAxis: {
-        type: "value",
-        name: "GDP Per Capita (US$)",
-        nameLocation: "middle",
-        nameGap: 35,
-        nameTextStyle: { color: c.textFaint, fontSize: 12 },
-        axisLine: { lineStyle: { color: c.axisLine } },
-        axisLabel: {
-          color: c.textFaint,
-          formatter: (v: number) => formatValue(v, "NY.GDP.PCAP.CD"),
-        },
-        splitLine: { lineStyle: { color: c.splitLineFaint } },
-      },
-      yAxis: {
-        type: "value",
-        name: "Population",
-        nameLocation: "middle",
-        nameGap: 65,
-        nameTextStyle: { color: c.textFaint, fontSize: 12 },
-        axisLine: { show: false },
-        axisLabel: {
-          color: c.textFaint,
-          formatter: (v: number) => formatValue(v, "SP.POP.TOTL"),
-        },
-        splitLine: { lineStyle: { color: c.splitLine } },
-      },
-      series: [
-        {
-          type: "scatter",
-          data: seriesData,
-          symbolSize: (val: number[]) => {
-            // Scale bubble size by GDP (logarithmic for visual balance)
-            return Math.max(20, Math.min(80, Math.log10(val[2]) * 6));
-          },
-          label: {
-            show: true,
-            formatter: (p: { name: string }) => p.name,
-            position: "top",
-            color: c.textMuted,
-            fontSize: 12,
-          },
-          emphasis: { scale: 1.3 },
-        },
-      ],
-    };
-
-    chartInstance.current.setOption(option, true);
-
-    const handleResize = () => chartInstance.current?.resize();
+    const handleResize = () => chart.resize();
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [data]);
 
-  useEffect(() => {
-    buildChart();
-  }, [buildChart]);
-
-  useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.attributeName === "data-theme") {
-          buildChart();
-          break;
-        }
-      }
+    const observer = new MutationObserver(() => {
+      chart.setOption(buildOption(data), true);
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, [buildChart]);
 
-  useEffect(() => {
     return () => {
-      chartInstance.current?.dispose();
+      observer.disconnect();
+      window.removeEventListener("resize", handleResize);
+      chart.dispose();
     };
-  }, []);
+  }, [data]);
 
   return <div ref={chartRef} className="h-[450px] w-full rounded-2xl border border-glass-border bg-glass/50 p-4" />;
 }

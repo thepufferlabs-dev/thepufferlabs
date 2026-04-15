@@ -3,11 +3,10 @@ name: World Bank Full Crawl
 on:
   workflow_dispatch:
     inputs:
-      start_batch:
+      start_from:
         description: "Start from country number (for resuming)"
         default: "1"
   schedule:
-    # Weekly full crawl on Sundays at 03:00 UTC
     - cron: "0 3 * * 0"
 
 jobs:
@@ -16,20 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
-      - name: Crawl one country at a time
+      - name: Crawl
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          START_FROM: ${{ github.event.inputs.start_batch || '1' }}
+          START: ${{ github.event.inputs.start_from || '1' }}
         run: |
           set +e
 
-          # ─── All 20 indicators split into 2 lightweight groups ───
-          GRP_A="NY.GDP.MKTP.CD,NY.GDP.MKTP.KD.ZG,NY.GDP.PCAP.CD,NY.GDP.PCAP.KD.ZG,FP.CPI.TOTL.ZG,NE.TRD.GNFS.ZS,BX.KLT.DINV.CD.WD,SL.UEM.TOTL.ZS,SL.TLF.CACT.ZS,SP.POP.TOTL"
-          GRP_B="SP.POP.GROW,SP.URB.TOTL.IN.ZS,SP.DYN.LE00.IN,SH.XPD.CHEX.GD.ZS,SE.ADT.LITR.ZS,SE.XPD.TOTL.GD.ZS,EG.USE.ELEC.KH.PC,IT.NET.USER.ZS,EN.ATM.CO2E.PC,NY.GNP.PCAP.CD"
+          ALL_IND="NY.GDP.MKTP.CD,NY.GDP.MKTP.KD.ZG,NY.GDP.PCAP.CD,NY.GDP.PCAP.KD.ZG,FP.CPI.TOTL.ZG,NE.TRD.GNFS.ZS,BX.KLT.DINV.CD.WD,SL.UEM.TOTL.ZS,SL.TLF.CACT.ZS,SP.POP.TOTL,SP.POP.GROW,SP.URB.TOTL.IN.ZS,SP.DYN.LE00.IN,SH.XPD.CHEX.GD.ZS,SE.ADT.LITR.ZS,SE.XPD.TOTL.GD.ZS,EG.USE.ELEC.KH.PC,IT.NET.USER.ZS,EN.ATM.CO2E.PC,NY.GNP.PCAP.CD"
+          IND_JSON=$(echo "$ALL_IND" | jq -R 'split(",")')
 
-          # ─── All ~215 countries ─────────────────────────────────
-          COUNTRIES=(
+          C=(
             ASM AUS BRN CHN FJI FSM GUM HKG IDN JPN KHM KIR KOR LAO MAC
             MHL MMR MNG MNP MYS NCL NRU NZL PHL PLW PNG PRK PYF SGP SLB
             SYC THA TKL TLS TON TUV TWN VNM VUT WSM
@@ -50,107 +47,70 @@ jobs:
             ZMB ZWE
           )
 
-          TOTAL=${#COUNTRIES[@]}
-          echo "Total countries: $TOTAL"
-          echo "Strategy: 1 country x 2 indicator groups (10 each) per step"
-          echo "Total API calls: $((TOTAL * 2))"
-          echo "Starting from country: $START_FROM"
+          T=${#C[@]}
+          OK=0; FAIL=0; ROWS=0; FAILS=""
+
+          REFRESH_EVERY=20  # Refresh views every 20 countries
+
+          echo "Countries: $T | Indicators: 20 | 1 call per country"
+          echo "Refresh views every: $REFRESH_EVERY countries"
+          echo "Starting from: $START"
           echo ""
 
-          OK=0
-          FAIL=0
-          ROWS=0
-          FAILED_LIST=""
-
-          echo "## World Bank Full Crawl" > /tmp/summary.md
-          echo "| # | Country | Grp A | Grp B | Rows |" >> /tmp/summary.md
-          echo "|---|---------|-------|-------|------|" >> /tmp/summary.md
-
-          fire() {
-            local CC="$1" IND="$2"
-            local IND_JSON
-            IND_JSON=$(echo "$IND" | jq -R 'split(",")')
-            jq -n \
-              --arg c "$CC" \
-              --argjson ind "$IND_JSON" \
-              '{countries: [$c], indicators: $ind, skip_overlap_check: true}' \
-              > /tmp/body.json
-
-            local CODE
-            CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
-              --max-time 55 \
-              -X POST "${SUPABASE_URL}/functions/v1/wb-sync" \
+          refresh_views() {
+            echo "  >> Refreshing materialized views..."
+            curl -s -o /dev/null -w "" --max-time 30 \
+              -X POST "${SUPABASE_URL}/rest/v1/rpc/refresh_wb_materialized_views" \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-              -H "Content-Type: application/json" \
-              -d @/tmp/body.json)
-
-            local R
-            R=$(jq -r '.rows_inserted // 0' /tmp/resp.json 2>/dev/null || echo 0)
-            echo "${CODE}:${R}"
+              -H "Content-Type: application/json" -d '{}'
+            echo "  >> Views refreshed"
           }
 
-          for (( i=0; i<TOTAL; i++ )); do
-            NUM=$((i + 1))
-            if [ "$NUM" -lt "$START_FROM" ]; then continue; fi
+          echo "## Crawl Results" > /tmp/s.md
+          echo "| # | CC | HTTP | Rows |" >> /tmp/s.md
+          echo "|---|-----|------|------|" >> /tmp/s.md
 
-            CC="${COUNTRIES[$i]}"
-            printf "%-4s %-3s " "$NUM." "$CC"
+          for (( i=0; i<T; i++ )); do
+            N=$((i+1))
+            [ "$N" -lt "$START" ] && continue
 
-            # Group A
-            RES_A=$(fire "$CC" "$GRP_A")
-            CODE_A="${RES_A%%:*}"
-            ROWS_A="${RES_A##*:}"
+            jq -n --arg c "${C[$i]}" --argjson ind "$IND_JSON" \
+              '{countries:[$c],indicators:$ind,skip_overlap_check:true}' > /tmp/b.json
 
-            sleep 2
+            CODE=$(curl -s -o /tmp/r.json -w "%{http_code}" --max-time 50 \
+              -X POST "${SUPABASE_URL}/functions/v1/wb-sync" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/json" -d @/tmp/b.json)
 
-            # Group B
-            RES_B=$(fire "$CC" "$GRP_B")
-            CODE_B="${RES_B%%:*}"
-            ROWS_B="${RES_B##*:}"
+            R=$(jq -r '.rows_inserted//0' /tmp/r.json 2>/dev/null || echo 0)
 
-            BATCH_ROWS=$((ROWS_A + ROWS_B))
-            STATUS_A=$( [ "$CODE_A" -ge 200 ] && [ "$CODE_A" -lt 300 ] 2>/dev/null && echo "ok" || echo "FAIL" )
-            STATUS_B=$( [ "$CODE_B" -ge 200 ] && [ "$CODE_B" -lt 300 ] 2>/dev/null && echo "ok" || echo "FAIL" )
-
-            echo "A:${CODE_A}(${ROWS_A}) B:${CODE_B}(${ROWS_B}) = ${BATCH_ROWS} rows"
-
-            if [ "$STATUS_A" = "ok" ] && [ "$STATUS_B" = "ok" ]; then
-              OK=$((OK + 1))
-              ROWS=$((ROWS + BATCH_ROWS))
-              echo "| $NUM | $CC | $CODE_A ($ROWS_A) | $CODE_B ($ROWS_B) | $BATCH_ROWS |" >> /tmp/summary.md
-            elif [ "$STATUS_A" = "ok" ] || [ "$STATUS_B" = "ok" ]; then
-              OK=$((OK + 1))
-              FAIL=$((FAIL + 1))
-              ROWS=$((ROWS + BATCH_ROWS))
-              FAILED_LIST="${FAILED_LIST} ${CC}"
-              echo "| $NUM | $CC | $CODE_A ($ROWS_A) | $CODE_B ($ROWS_B) | $BATCH_ROWS (partial) |" >> /tmp/summary.md
+            if [ "$CODE" -ge 200 ] 2>/dev/null && [ "$CODE" -lt 300 ] 2>/dev/null; then
+              printf "%3d. %-3s %s (%s)\n" "$N" "${C[$i]}" "$CODE" "$R"
+              OK=$((OK+1)); ROWS=$((ROWS+R))
+              echo "| $N | ${C[$i]} | $CODE | $R |" >> /tmp/s.md
             else
-              FAIL=$((FAIL + 1))
-              FAILED_LIST="${FAILED_LIST} ${CC}"
-              echo "| $NUM | $CC | $CODE_A | $CODE_B | FAILED |" >> /tmp/summary.md
+              printf "%3d. %-3s FAIL %s\n" "$N" "${C[$i]}" "$CODE"
+              FAIL=$((FAIL+1)); FAILS="$FAILS ${C[$i]}"
+              echo "| $N | ${C[$i]} | $CODE | FAIL |" >> /tmp/s.md
             fi
 
-            # Short pause between countries
-            if [ "$i" -lt "$((TOTAL - 1))" ]; then sleep 2; fi
+            # Refresh views periodically so analytics page updates incrementally
+            if [ $((N % REFRESH_EVERY)) -eq 0 ]; then
+              refresh_views
+            fi
           done
 
+          # Final refresh after all countries
+          refresh_views
+
           echo ""
-          echo "==============================="
-          echo "DONE  ok=$OK  fail=$FAIL  rows=$ROWS"
-          if [ -n "$FAILED_LIST" ]; then
-            echo "Failed countries:$FAILED_LIST"
-          fi
-          echo "==============================="
+          echo "=== DONE ok=$OK fail=$FAIL rows=$ROWS ==="
+          [ -n "$FAILS" ] && echo "Failed:$FAILS"
 
-          echo "" >> /tmp/summary.md
-          echo "### Result" >> /tmp/summary.md
-          echo "- **OK:** $OK / $TOTAL" >> /tmp/summary.md
-          echo "- **Failed:** $FAIL" >> /tmp/summary.md
-          echo "- **Total rows:** $ROWS" >> /tmp/summary.md
-          if [ -n "$FAILED_LIST" ]; then
-            echo "- **Retry needed:**$FAILED_LIST" >> /tmp/summary.md
-          fi
-          echo "- **Finished:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> /tmp/summary.md
-          cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> /tmp/s.md
+          echo "**OK:** $OK | **Fail:** $FAIL | **Rows:** $ROWS" >> /tmp/s.md
+          [ -n "$FAILS" ] && echo "**Retry:**$FAILS" >> /tmp/s.md
+          cat /tmp/s.md >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$OK" -eq 0 ] && [ "$FAIL" -gt 0 ]; then exit 1; fi
+          [ "$OK" -eq 0 ] && [ "$FAIL" -gt 0 ] && exit 1 || true
