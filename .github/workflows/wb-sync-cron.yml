@@ -21,53 +21,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Build request body
-        id: body
         run: |
-          # Use inputs if manually triggered, otherwise defaults
           COUNTRIES="${{ github.event.inputs.countries || 'IND,USA,CHN,GBR' }}"
           INDICATORS="${{ github.event.inputs.indicators || 'NY.GDP.MKTP.CD,NY.GDP.PCAP.CD,SP.POP.TOTL' }}"
 
-          # Convert comma-separated to JSON arrays
+          # Convert comma-separated to JSON arrays and write to file
           COUNTRIES_JSON=$(echo "$COUNTRIES" | jq -R 'split(",")')
           INDICATORS_JSON=$(echo "$INDICATORS" | jq -R 'split(",")')
 
-          BODY=$(jq -n \
+          jq -n \
             --argjson countries "$COUNTRIES_JSON" \
             --argjson indicators "$INDICATORS_JSON" \
-            '{countries: $countries, indicators: $indicators}')
+            '{countries: $countries, indicators: $indicators}' > /tmp/wb-sync-body.json
 
-          echo "body=$BODY" >> "$GITHUB_OUTPUT"
-          echo "Sync request body: $BODY"
+          echo "Request body:"
+          cat /tmp/wb-sync-body.json
 
       - name: Trigger wb-sync Edge Function
-        id: sync
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
+          HTTP_CODE=$(curl -s -o /tmp/wb-sync-response.json -w "%{http_code}" \
             -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/wb-sync" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '${{ steps.body.outputs.body }}')
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
+            -d @/tmp/wb-sync-body.json)
 
           echo "HTTP Status: $HTTP_CODE"
-          echo "Response: $BODY"
-
-          echo "status=$HTTP_CODE" >> "$GITHUB_OUTPUT"
-          echo "response=$BODY" >> "$GITHUB_OUTPUT"
+          echo "Response:"
+          cat /tmp/wb-sync-response.json
 
           if [ "$HTTP_CODE" -ge 400 ]; then
-            echo "::error::Sync failed with HTTP $HTTP_CODE: $BODY"
+            echo "::error::Sync failed with HTTP $HTTP_CODE"
+            cat /tmp/wb-sync-response.json
             exit 1
           fi
 
       - name: Summary
         if: always()
         run: |
+          RESPONSE=$(cat /tmp/wb-sync-response.json 2>/dev/null || echo "No response")
           echo "## World Bank Data Sync" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** ${{ steps.sync.outputs.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Response:** \`${{ steps.sync.outputs.response }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo '- **Response:**' >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESPONSE" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
