@@ -30,7 +30,7 @@ const DEFAULT_INDICATORS = [
 ];
 const PER_PAGE = 1000;
 const MAX_RETRIES = 3;
-const RATE_LIMIT_DELAY_MS = 300; // 300ms between API calls (WB API handles ~3 req/s fine)
+const RATE_LIMIT_DELAY_MS = 0; // No delay — WB API handles burst fine for small batches
 
 // ─── Types ───────────────────────────────────────────────────
 interface WBApiMetadata {
@@ -107,8 +107,6 @@ async function fetchWithRetry(
 async function fetchIndicatorData(
   indicator: string,
   countries: string[],
-  runId: string,
-  supabase: ReturnType<typeof createClient>
 ): Promise<WBDataPoint[]> {
   const countryList = countries.join(";");
   const allData: WBDataPoint[] = [];
@@ -134,14 +132,8 @@ async function fetchIndicatorData(
     const data: WBDataPoint[] | null = json[1];
     totalPages = meta.pages;
 
-    // Store raw payload for audit
-    await supabase.from("wb_raw_observations").insert({
-      job_run_id: runId,
-      request_url: url,
-      payload_json: json,
-      page,
-      total_pages: totalPages,
-    });
+    // Skip raw payload storage during crawl — saves ~2s per indicator
+    // Raw payloads can be re-fetched from WB API if needed for audit
 
     if (data && data.length > 0) {
       allData.push(...data);
@@ -343,7 +335,7 @@ Deno.serve(async (req) => {
       });
 
       try {
-        const data = await fetchIndicatorData(indicator, countries, runId, supabase);
+        const data = await fetchIndicatorData(indicator, countries);
 
         if (data.length === 0) {
           log("warn", "No data returned for indicator", { indicator, countries });
